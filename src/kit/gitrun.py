@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -9,6 +10,7 @@ from pathlib import Path
 from kit.errors import KitError
 
 Runner = Callable[[list[str], Path], str]
+RunInput = Callable[[list[str], Path, str, dict[str, str]], subprocess.CompletedProcess[str]]
 
 
 def run(cmd: list[str], cwd: Path) -> str:
@@ -17,6 +19,14 @@ def run(cmd: list[str], cwd: Path) -> str:
         lines = done.stderr.strip().splitlines()
         raise KitError(f"{' '.join(cmd)} failed: {lines[0] if lines else 'no error output'}")
     return done.stdout
+
+
+def run_input(cmd: list[str], cwd: Path, stdin: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    """Run `cmd` with `stdin` text; never raises on a non-zero exit, callers read `returncode`.
+
+    `env` is merged over `os.environ`, not a replacement, so PATH (and thus `node`, `sh`) still resolves.
+    """
+    return subprocess.run(cmd, cwd=cwd, input=stdin, capture_output=True, text=True, env={**os.environ, **env})
 
 
 def require_dir(path: Path, role: str) -> Path:
