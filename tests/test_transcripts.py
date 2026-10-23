@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from builders import assistant, rec, user
+from builders import assistant, assistant_text, attachment, rec, tool_result, tool_use, user
 
 from kit.bench.transcripts import (
     Call,
@@ -88,3 +88,41 @@ def test_main_checkout_of_a_worktree(tmp_path: Path) -> None:
     (wt / ".git").write_text(f"gitdir: {main / '.git' / 'worktrees' / 'wt'}\n")
     assert main_checkout(wt) == main
     assert main_checkout(main) == main
+
+
+def test_counts_denials_and_context_warnings() -> None:
+    t = parse_transcript([
+        tool_result("1", "Permission for this action was denied by the Claude Code auto mode classifier.", True),
+        tool_result("2", "The user doesn't want to proceed with this tool use.", True),
+        tool_result("3", "PreToolUse:Bash hook error: This may change ../capital-trading", True),
+        tool_result("4", "Exit code 1", True),
+        attachment("hook_system_message", "Context is 87k tokens (checkpoint: 80k)."),
+        attachment("hook_additional_context", ["Context is 84k tokens, past the 80k checkpoint."]),
+        attachment("hook_additional_context", ["Follow docs/code-conventions.md section 3"]),
+    ])
+    assert (t.permission_denials, t.hook_denials, t.context_warnings) == (2, 1, 2)
+
+
+def test_failed_test_runs_match_the_test_command_only() -> None:
+    lines = [
+        tool_use("a", "uv run pytest -q tests/x.py"), tool_result("a", "1 failed", True),
+        tool_use("b", "uv run pytest -q tests/x.py"), tool_result("b", "1 passed", False),
+        tool_use("c", "ls nope"), tool_result("c", "Exit code 1", True),
+    ]
+    assert parse_transcript(lines, "uv run pytest").failed_test_runs == 1
+    assert parse_transcript(lines).failed_test_runs == 0
+
+
+def test_last_text_is_the_final_assistant_text() -> None:
+    assert parse_transcript([assistant_text("m1", "draft"), assistant_text("m2", "PASS")]).last_text == "PASS"
+
+
+def test_last_text_joins_the_text_blocks_of_the_last_message() -> None:
+    assert parse_transcript([assistant_text("m1", "1. a"), assistant_text("m1", "2. b")]).last_text == "1. a\n2. b"
+
+
+def test_load_sessions_threads_the_test_command(tmp_path: Path) -> None:
+    lines = [assistant("a"), tool_use("a", "pytest"), tool_result("a", "boom", True)]
+    (tmp_path / "s1.jsonl").write_text("\n".join(lines))
+    assert load_sessions(tmp_path, "pytest")[0].main.failed_test_runs == 1
+    assert load_sessions(tmp_path)[0].main.failed_test_runs == 0

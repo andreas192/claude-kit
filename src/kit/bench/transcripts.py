@@ -7,11 +7,15 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
 BIG_RESULT_CHARS = 20_000
+PERMISSION_DENIED = re.compile(r"^Permission for this action was denied|doesn't want to proceed")
+HOOK_DENIED = re.compile(r"^\w+:\w+ hook error:")
+CONTEXT_WARN = "Context is "
+WARN_ATTACHMENTS = ("hook_system_message", "hook_additional_context")
 # Cost proxy in "fresh-input tokens": cache write 1.25x, cache read 0.1x, output 5x.
 WEIGHTS = {"fresh": 1.0, "write": 1.25, "read": 0.1, "output": 5.0}
 
@@ -45,6 +49,11 @@ class Transcript:
     prompts: int = 0
     start: str = ""
     end: str = ""
+    permission_denials: int = 0
+    hook_denials: int = 0
+    context_warnings: int = 0
+    failed_test_runs: int = 0
+    last_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -73,24 +82,65 @@ def model_family(model: str | None) -> str:
     return ""
 
 
-def result_chars(content: object) -> int:
+def result_text(content: object) -> str:
     if isinstance(content, str):
-        return len(content)
+        return content
     if isinstance(content, list):
-        return sum(len(b.get("text", "")) for b in content if isinstance(b, dict))
-    return 0
+        return "".join(b.get("text", "") for b in content if isinstance(b, dict))
+    return ""
 
 
-def count_user_record(record: dict, transcript: Transcript) -> None:
+def result_chars(content: object) -> int:
+    return len(result_text(content))
+
+
+def count_tool_result(block: dict, transcript: Transcript, test_ids: Collection[str]) -> None:
+    text = result_text(block.get("content"))
+    transcript.big_results += len(text) > BIG_RESULT_CHARS
+    if not block.get("is_error"):
+        return
+    transcript.permission_denials += bool(PERMISSION_DENIED.search(text))
+    transcript.hook_denials += bool(HOOK_DENIED.search(text))
+    transcript.failed_test_runs += block.get("tool_use_id") in test_ids
+
+
+def count_user_record(record: dict, transcript: Transcript, test_ids: Collection[str] = ()) -> None:
     content = record.get("message", {}).get("content")
     if isinstance(content, str):
         transcript.prompts += not record.get("isMeta")
         return
     for block in content or []:
         if block.get("type") == "tool_result":
-            transcript.big_results += result_chars(block.get("content")) > BIG_RESULT_CHARS
+            count_tool_result(block, transcript, test_ids)
         elif block.get("type") == "text":
             transcript.prompts += 1
+
+
+def count_attachment(record: dict, transcript: Transcript) -> None:
+    attachment = record.get("attachment") or {}
+    if attachment.get("type") not in WARN_ATTACHMENTS:
+        return
+    content = attachment.get("content")
+    texts = content if isinstance(content, list) else [content]
+    transcript.context_warnings += any(isinstance(t, str) and t.startswith(CONTEXT_WARN) for t in texts)
+
+
+def test_command_ids(blocks: list, test_command: str) -> set[str]:
+    """Ids of the Bash tool_use blocks whose command contains the repo's test command."""
+    return {
+        b["id"]
+        for b in blocks
+        if test_command and b.get("type") == "tool_use" and b.get("name") == "Bash" and test_command in b.get("input", {}).get("command", "")
+    }
+
+
+def note_assistant_message(message: dict, transcript: Transcript, state: dict) -> None:
+    """Track the text blocks of the latest message id (streamed records of one message share an id)."""
+    blocks = [b for b in message.get("content") or [] if isinstance(b, dict)]
+    if message.get("id") != state.get("id"):
+        state["id"], state["texts"] = message.get("id"), []
+    state["texts"] += [b["text"] for b in blocks if b.get("type") == "text" and b["text"] not in state["texts"]]
+    transcript.last_text = "\n".join(state["texts"])
 
 
 def usage_call(message: dict) -> Call | None:
@@ -115,17 +165,21 @@ def json_records(lines: Iterable[str]) -> Iterator[dict]:
             continue
 
 
-def parse_transcript(lines: Iterable[str]) -> Transcript:
+def parse_transcript(lines: Iterable[str], test_command: str = "") -> Transcript:
     """One call per message.id (streamed records repeat it; the last one wins), in first-seen order."""
-    transcript, by_id = Transcript(), {}
+    transcript, by_id, test_ids, last_message = Transcript(), {}, set(), {}
     for record in json_records(lines):
         timestamp = record.get("timestamp", "")
         transcript.start = transcript.start or timestamp
         transcript.end = timestamp or transcript.end
         if record.get("type") == "user":
-            count_user_record(record, transcript)
+            count_user_record(record, transcript, test_ids)
+        elif record.get("type") == "attachment":
+            count_attachment(record, transcript)
         elif record.get("type") == "assistant":
             message = record.get("message", {})
+            test_ids |= test_command_ids(message.get("content") or [], test_command)
+            note_assistant_message(message, transcript, last_message)
             call = usage_call(message)
             if call and message.get("id"):
                 by_id[message["id"]] = call
@@ -133,25 +187,25 @@ def parse_transcript(lines: Iterable[str]) -> Transcript:
     return transcript
 
 
-def read_transcript(path: Path) -> Transcript:
+def read_transcript(path: Path, test_command: str = "") -> Transcript:
     with path.open(errors="ignore") as handle:
-        return parse_transcript(handle)
+        return parse_transcript(handle, test_command)
 
 
-def read_subagent(path: Path) -> Subagent:
+def read_subagent(path: Path, test_command: str = "") -> Subagent:
     meta_path = path.with_name(path.name.removesuffix(".jsonl") + ".meta.json")
     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
-    return Subagent(meta.get("agentType", ""), meta.get("description", ""), read_transcript(path))
+    return Subagent(meta.get("agentType", ""), meta.get("description", ""), read_transcript(path, test_command))
 
 
-def load_sessions(project_dir: Path) -> list[Session]:
+def load_sessions(project_dir: Path, test_command: str = "") -> list[Session]:
     sessions = []
     for path in sorted(project_dir.glob("*.jsonl")):
-        main = read_transcript(path)
+        main = read_transcript(path, test_command)
         if not main.calls:
             continue
         sub_paths = sorted((project_dir / path.stem / "subagents").glob("agent-*.jsonl"))
-        sessions.append(Session(path.stem, main, [read_subagent(p) for p in sub_paths]))
+        sessions.append(Session(path.stem, main, [read_subagent(p, test_command) for p in sub_paths]))
     return sessions
 
 
