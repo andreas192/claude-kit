@@ -17,3 +17,9 @@ def run(cmd: list[str], cwd: Path) -> str:
         lines = done.stderr.strip().splitlines()
         raise KitError(f"{' '.join(cmd)} failed: {lines[0] if lines else 'no error output'}")
     return done.stdout
+
+
+def require_dir(path: Path, role: str) -> Path:
+    if not path.is_dir():
+        raise KitError(f"{role} not found: {path}")
+    return path

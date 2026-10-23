@@ -70,3 +70,11 @@ def merged_at(repo: Path, version: str, branch: str, run: Runner) -> str | None:
     )
     lines = out.split()
     return lines[0] if lines else None
+
+
+def history(repo: Path, run: Runner) -> list[Merge]:
+    """The default branch's merges with an empty list for a directory that is not a git repo with commits."""
+    try:
+        return merges(repo, default_branch(repo, run), run)
+    except KitError:
+        return []

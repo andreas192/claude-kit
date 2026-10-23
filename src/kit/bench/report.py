@@ -8,6 +8,7 @@ from kit.bench.benchmarks import Benchmark, fmt
 from kit.bench.transcripts import Session
 
 MIN_SESSIONS = 5
+FIX_SHARE_ROW = ("Q4", "share of merges followed by a fix within 7 days", "falls")
 NOT_ENOUGH = "not enough data"
 
 
@@ -15,6 +16,7 @@ NOT_ENOUGH = "not enough data"
 class Column:
     name: str
     sessions: list[Session]
+    fix_share: float = float("nan")  # Q4: share of the window's merges followed by a fix
 
 
 def row_line(cells: list[str]) -> str:
@@ -25,6 +27,12 @@ def delta(measure: Benchmark, earlier: Column, later: Column, min_sessions: int)
     if min(len(earlier.sessions), len(later.sessions)) < min_sessions:
         return NOT_ENOUGH
     return fmt(measure.measure(later.sessions) - measure.measure(earlier.sessions))
+
+
+def fix_share_delta(earlier: Column, later: Column, min_sessions: int) -> str:
+    if min(len(earlier.sessions), len(later.sessions)) < min_sessions:
+        return NOT_ENOUGH
+    return fmt(later.fix_share - earlier.fix_share)
 
 
 def pairs(columns: list[Column]) -> list[tuple[int, int]]:
@@ -54,6 +62,13 @@ def report_lines(
             if control is not None:
                 cells.append(delta(m, control[a], control[b], min_sessions))
         lines.append(row_line([*cells, m.target]))
+    key, label, target = FIX_SHARE_ROW
+    cells = [f"{key} {label}", *(fmt(c.fix_share) for c in columns)]
+    for a, b in pairs(columns):
+        cells.append(fix_share_delta(columns[a], columns[b], min_sessions))
+        if control is not None:
+            cells.append(fix_share_delta(control[a], control[b], min_sessions))
+    lines.append(row_line([*cells, target]))
     if not_measured:
         lines += ["", "Not measured:", *(f"- {item}" for item in not_measured)]
     return lines

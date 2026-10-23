@@ -1,36 +1,11 @@
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
+from builders import commit, git, merge_branch
 
-from kit.bench.gitlog import Merge, default_branch, followed_by_fix, merged_at, merges
+from kit.bench.gitlog import Merge, default_branch, followed_by_fix, history, merged_at, merges
 from kit.gitrun import run
 from kit.errors import KitError
-
-
-def git(repo: Path, *args: str, date: str | None = None) -> None:
-    env = {**os.environ, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date} if date else None
-    subprocess.run(
-        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", *args],
-        cwd=repo, check=True, capture_output=True, text=True, env=env,
-    )
-
-
-def commit(repo: Path, files: dict[str, str], message: str, date: str) -> None:
-    for name, text in files.items():
-        path = repo / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-m", message, date=date)
-
-
-def merge_branch(repo: Path, name: str, files: dict[str, str], subject: str, date: str) -> None:
-    git(repo, "checkout", "-b", name)
-    commit(repo, files, f"work on {name}", date)
-    git(repo, "checkout", "main")
-    git(repo, "merge", "--no-ff", "-m", subject, name, date=date)
 
 
 @pytest.fixture
@@ -82,3 +57,11 @@ def test_merged_at_finds_the_merge_that_brought_the_entry(repo):
     merge_branch(repo, "chore/claude-kit-v0.1.0", {".claude/kit.json": '{"applies": [{"version": "v0.1.0"}]}'}, "Merge kit", "2026-10-02T09:00:00Z")
     assert merged_at(repo, "v0.1.0", "main", run) == "2026-10-02T09:00:00+00:00"
     assert merged_at(repo, "v0.2.0", "main", run) is None
+
+
+def test_history_lists_the_default_branch_merges(repo):
+    assert [m.subject for m in history(repo, run)] == ["init"]
+
+
+def test_history_is_empty_without_git(tmp_path):
+    assert history(tmp_path, run) == []

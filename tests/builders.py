@@ -1,6 +1,9 @@
 """Helpers that build transcript records and sessions in code, shared by the bench unit tests."""
 
 import json
+import os
+import subprocess
+from pathlib import Path
 
 from kit.bench.transcripts import Call, Session, Subagent, Transcript
 
@@ -61,3 +64,27 @@ def session(
     main = Transcript(calls=[Call("opus", 0, 0, peak, 1)], start=start, end=end, prompts=prompts)
     subs = [Subagent(kind, desc, Transcript(calls=[Call(model, 5, 1000, 0, 1)])) for kind, desc, model in agents]
     return Session("s", main, subs + (subagents or []))
+
+
+def git(repo: Path, *args: str, date: str | None = None) -> None:
+    env = {**os.environ, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date} if date else None
+    subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", *args],
+        cwd=repo, check=True, capture_output=True, text=True, env=env,
+    )
+
+
+def commit(repo: Path, files: dict[str, str], message: str, date: str) -> None:
+    for name, text in files.items():
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", message, date=date)
+
+
+def merge_branch(repo: Path, name: str, files: dict[str, str], subject: str, date: str) -> None:
+    git(repo, "checkout", "-b", name)
+    commit(repo, files, f"work on {name}", date)
+    git(repo, "checkout", "main")
+    git(repo, "merge", "--no-ff", "-m", subject, name, date=date)

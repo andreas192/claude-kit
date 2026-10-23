@@ -57,3 +57,23 @@ def test_nan_delta_renders_as_fmt_renders_nan():
 
 def test_no_not_measured_section_when_empty():
     assert "Not measured:" not in report_lines([Column("a", sessions(5)), Column("b", sessions(5))], None, [FIXED_MEASURE], [])
+
+
+def test_q4_row_from_fix_share_with_delta_and_not_enough_data():
+    cols = [Column("pre-kit", sessions(6), 0.5), Column("v0.1.0", sessions(6), 0.25)]
+    cells = [c.strip() for c in row(report_lines(cols, None, [], []), "Q4").strip("|").split("|")]
+    assert cells == ["Q4 share of merges followed by a fix within 7 days", "0.50", "0.25", "-0.25", "falls"]
+    thin = [Column("pre-kit", sessions(6), 0.5), Column("v0.1.0", sessions(2), 0.25)]
+    assert "not enough data" in row(report_lines(thin, None, [], []), "Q4")
+
+
+def test_q4_control_delta_uses_the_controls_fix_share():
+    cols = [Column("pre-kit", sessions(6), 0.5), Column("v0.1.0", sessions(6), 0.25)]
+    control = [Column("pre-kit", sessions(6), 0.2), Column("v0.1.0", sessions(6), 0.3)]
+    cells = [c.strip() for c in row(report_lines(cols, control, [], []), "Q4").strip("|").split("|")]
+    assert cells[3:5] == ["-0.25", "0.10"]
+
+
+def test_q4_nan_when_no_merges():
+    lines = report_lines([Column("a", sessions(5)), Column("b", sessions(5))], None, [], [])
+    assert [c.strip() for c in row(lines, "Q4").strip("|").split("|")][1:4] == ["-", "-", "-"]
