@@ -48,7 +48,7 @@ def report_lines(
     blanks = [""] * len(delta_heads)
     lines.append(row_line(["sessions", *(str(len(c.sessions)) for c in columns), *blanks, ""]))
     for m in measures:
-        cells = [m.label, *(fmt(m.measure(c.sessions)) for c in columns)]
+        cells = [f"{m.key} {m.label}", *(fmt(m.measure(c.sessions)) for c in columns)]
         for a, b in pairs(columns):
             cells.append(delta(m, columns[a], columns[b], min_sessions))
             if control is not None:
