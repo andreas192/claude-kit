@@ -28,8 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def bench_command(args: argparse.Namespace) -> int:
-    control = args.control or default_control(args.repo)
-    path = run_bench(args.repo, control, args.root, date.today(), run, args.since)
+    repo = args.repo.resolve()
+    control = args.control.resolve() if args.control else default_control(repo)
+    path = run_bench(repo, control, args.root, date.today(), run, args.since)
     print(path.read_text(), end="")
     return 0
 

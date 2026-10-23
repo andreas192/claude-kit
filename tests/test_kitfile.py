@@ -32,3 +32,20 @@ def test_written_text_is_searchable_by_git_pickaxe(tmp_path):
     assert '"version": "v0.1.0"' in text and text.endswith("\n")
     assert list(json.loads(text)) == ["test_command", "applies"]
     assert list(json.loads(text)["applies"][0]) == ["version", "commit", "applied_at", "overrides"]
+
+
+def kit_json(tmp_path, text):
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "kit.json").write_text(text)
+
+
+def test_read_kitfile_bad_json_is_a_kit_error_naming_the_file(tmp_path):
+    kit_json(tmp_path, "{not json")
+    with pytest.raises(KitError, match=r"kit\.json: invalid kit\.json"):
+        read_kitfile(tmp_path)
+
+
+def test_read_kitfile_missing_key_is_a_kit_error(tmp_path):
+    kit_json(tmp_path, json.dumps({"test_command": "t"}))
+    with pytest.raises(KitError, match="invalid kit.json: missing 'applies'"):
+        read_kitfile(tmp_path)

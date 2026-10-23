@@ -25,15 +25,23 @@ class KitFile:
     applies: tuple[Apply, ...]
 
 
-def read_kitfile(repo: Path) -> KitFile | None:
-    path = repo / KITFILE
-    if not path.is_file():
-        return None
-    data = json.loads(path.read_text())
+def parse_kitfile(text: str) -> KitFile:
+    data = json.loads(text)
     applies = tuple(
         Apply(a["version"], a["commit"], a["applied_at"], tuple(a.get("overrides", ()))) for a in data["applies"]
     )
     return KitFile(data["test_command"], applies)
+
+
+def read_kitfile(repo: Path) -> KitFile | None:
+    path = repo / KITFILE
+    if not path.is_file():
+        return None
+    try:
+        return parse_kitfile(path.read_text())
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError) as exc:
+        reason = f"missing {exc}" if isinstance(exc, KeyError) else str(exc)
+        raise KitError(f"{path}: invalid kit.json: {reason}") from exc
 
 
 def with_apply(kit: KitFile, apply: Apply) -> KitFile:

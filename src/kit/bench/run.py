@@ -14,7 +14,7 @@ from kit.bench.transcripts import Session, load_sessions, main_checkout, project
 from kit.bench.windows import PRE_KIT, Window, assign, drop_before, fix_share, make_windows
 from kit.gitrun import Runner, require_dir
 from kit.kitfile import KitFile, read_kitfile
-from kit.status import find_kit_repos
+from kit.status import INVALID, find_kit_repos
 
 BENCH_DIR = Path(".claude") / "kit-bench"
 BASELINE = "baseline.json"
@@ -22,7 +22,8 @@ EVERYTHING = Window(PRE_KIT, "", "")
 
 
 def default_control(repo: Path) -> Path | None:
-    others = [r for r in find_kit_repos(repo.parent) if r.name != repo.name]
+    repo = repo.resolve()
+    others = [r for r in find_kit_repos(repo.parent) if r.name != repo.name and r.version != INVALID]
     return repo.parent / others[0].name if others else None
 
 
@@ -63,7 +64,7 @@ def write_baseline(repo: Path, root: Path, run: Runner) -> Path:
 
 
 def run_bench(repo: Path, control: Path | None, root: Path, today: date, run: Runner, since: str = "") -> Path:
-    require_dir(repo, "repo")
+    repo = require_dir(repo, "repo").resolve()
     if control is not None:
         require_dir(control, "control repo")
     windows = repo_windows(repo, read_kitfile(repo) or KitFile("", ()), run)

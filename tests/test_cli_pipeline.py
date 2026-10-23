@@ -100,3 +100,27 @@ def test_status_lists_kit_repos_under_base(tmp_path, capsys):
     write_kitfile(tmp_path / "a", KitFile("pytest", (Apply("v0.2.0", "c", "t", (".claude/agents/x.md",)),)))
     assert main(["status", "--base", str(tmp_path)]) == 0
     assert capsys.readouterr().out.strip() == "a  v0.2.0  overrides: .claude/agents/x.md"
+
+
+def test_bench_dot_uses_the_sibling_kit_repo_as_control(bench_repo, monkeypatch, capsys):
+    repo, root = bench_repo
+    (repo.parent / "sibling").mkdir()
+    write_kitfile(repo.parent / "sibling", KitFile("pytest", (Apply("v0.1.0", "x", APPLIED),)))
+    monkeypatch.chdir(repo)
+    assert main(["bench", ".", "--root", str(root)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("# kit bench: repo (") and "control Δ pre-kit→v0.1.0" in out
+
+
+def test_bench_with_a_bad_kit_json_in_the_target_is_exit_1(bench_repo, capsys):
+    repo, root = bench_repo
+    (repo / ".claude" / "kit.json").write_text("{oops")
+    assert main(["bench", str(repo), "--root", str(root)]) == 1
+    assert "invalid kit.json" in capsys.readouterr().err
+
+
+def test_status_survives_a_corrupt_sibling(tmp_path, capsys):
+    (tmp_path / "bad" / ".claude").mkdir(parents=True)
+    (tmp_path / "bad" / ".claude" / "kit.json").write_text("{oops")
+    assert main(["status", "--base", str(tmp_path)]) == 0
+    assert capsys.readouterr().out.strip() == "bad  invalid kit.json"

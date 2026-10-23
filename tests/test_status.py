@@ -1,5 +1,7 @@
 """UNIT: kit.status, the kit repos next to each other, and bench.run.default_control."""
 
+from pathlib import Path
+
 from kit.bench.run import default_control
 from kit.kitfile import Apply, KitFile, write_kitfile
 from kit.status import RepoStatus, find_kit_repos, status_lines
@@ -45,3 +47,29 @@ def test_default_control_is_the_other_kit_repo(tmp_path):
 
 def test_default_control_is_none_for_the_only_repo(tmp_path):
     assert default_control(kit_repo(tmp_path, "a", [Apply("v0.1.0", "c", "t")])) is None
+
+
+def corrupt_repo(base, name):
+    (base / name / ".claude").mkdir(parents=True)
+    (base / name / ".claude" / "kit.json").write_text("{oops")
+
+
+def test_find_kit_repos_lists_a_corrupt_sibling_as_invalid(tmp_path):
+    corrupt_repo(tmp_path, "a")
+    kit_repo(tmp_path, "b", [Apply("v0.1.0", "c", "t")])
+    assert find_kit_repos(tmp_path) == [RepoStatus("a", "invalid kit.json", ()), RepoStatus("b", "v0.1.0", ())]
+
+
+def test_default_control_skips_a_corrupt_sibling(tmp_path):
+    a = kit_repo(tmp_path, "a", [Apply("v0.1.0", "c", "t")])
+    corrupt_repo(tmp_path, "b")
+    assert default_control(a) is None
+    c = kit_repo(tmp_path, "c", [Apply("v0.1.0", "c", "t")])
+    assert default_control(a) == c
+
+
+def test_default_control_resolves_a_relative_repo(tmp_path, monkeypatch):
+    a = kit_repo(tmp_path, "a", [Apply("v0.1.0", "c", "t")])
+    b = kit_repo(tmp_path, "b", [Apply("v0.1.0", "c", "t")])
+    monkeypatch.chdir(a)
+    assert default_control(Path(".")) == b.resolve()

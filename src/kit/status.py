@@ -5,8 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from kit.errors import KitError
 from kit.kitfile import read_kitfile
 
+INVALID = "invalid kit.json"
 NONE_FOUND = "no repos with .claude/kit.json found"
 
 
@@ -18,7 +20,10 @@ class RepoStatus:
 
 
 def repo_status(repo: Path) -> RepoStatus | None:
-    kit = read_kitfile(repo)
+    try:
+        kit = read_kitfile(repo)
+    except KitError:
+        return RepoStatus(repo.name, INVALID, ())
     if kit is None or not kit.applies:
         return None
     last = kit.applies[-1]
