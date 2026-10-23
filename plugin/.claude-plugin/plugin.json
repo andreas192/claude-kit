@@ -1,0 +1,6 @@
+{
+  "name": "kit",
+  "version": "0.1.0",
+  "description": "Shared Claude Code agents and hooks (claude-kit)",
+  "author": { "name": "Andrei Luculescu" }
+}
