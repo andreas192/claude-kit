@@ -9,6 +9,7 @@ from pathlib import Path
 
 from kit.errors import KitError
 
+NOT_RUNNABLE = 127
 Runner = Callable[[list[str], Path], str]
 RunInput = Callable[[list[str], Path, str, dict[str, str]], subprocess.CompletedProcess[str]]
 
@@ -25,8 +26,12 @@ def run_input(cmd: list[str], cwd: Path, stdin: str, env: dict[str, str]) -> sub
     """Run `cmd` with `stdin` text; never raises on a non-zero exit, callers read `returncode`.
 
     `env` is merged over `os.environ`, not a replacement, so PATH (and thus `node`, `sh`) still resolves.
+    A program that cannot be started (not on PATH, not executable) yields returncode 127 with the reason on stderr.
     """
-    return subprocess.run(cmd, cwd=cwd, input=stdin, capture_output=True, text=True, env={**os.environ, **env})
+    try:
+        return subprocess.run(cmd, cwd=cwd, input=stdin, capture_output=True, text=True, env={**os.environ, **env})
+    except OSError as error:
+        return subprocess.CompletedProcess(cmd, NOT_RUNNABLE, "", f"{cmd[0]}: not found ({error})")
 
 
 def require_dir(path: Path, role: str) -> Path:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from kit.errors import KitError
 from kit.frontmatter import parse_frontmatter
-from kit.gitrun import RunInput
+from kit.gitrun import NOT_RUNNABLE, RunInput
 from kit.settings_edit import read_settings
 
 AGENT_KEYS = ("name", "description", "model", "tools")
@@ -90,7 +90,8 @@ def check_agents(plugin: Path) -> Check:
 def check_tests(repo: Path, test_command: str, run_input: RunInput) -> Check:
     done = run_input(["sh", "-c", test_command], repo, "", {})
     if done.returncode != 0:
-        return Check("tests", False, f"{test_command} failed; this may predate the kit: run it on the default branch to compare")
+        reason = f" ({done.stderr.strip()})" if done.returncode == NOT_RUNNABLE and done.stderr.strip() else ""
+        return Check("tests", False, f"{test_command} failed{reason}; this may predate the kit: run it on the default branch to compare")
     return Check("tests", True, f"{test_command} passed")
 
 

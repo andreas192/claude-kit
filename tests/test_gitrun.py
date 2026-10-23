@@ -26,3 +26,10 @@ def test_run_input_does_not_raise_on_failure(tmp_path):
     from kit.gitrun import run_input
 
     assert run_input(["sh", "-c", "exit 3"], tmp_path, "", {}).returncode == 3
+
+
+def test_run_input_reports_a_missing_program_as_127_naming_it(tmp_path):
+    from kit.gitrun import run_input
+
+    done = run_input(["kit-no-such-program"], tmp_path, "", {})
+    assert done.returncode == 127 and "kit-no-such-program" in done.stderr

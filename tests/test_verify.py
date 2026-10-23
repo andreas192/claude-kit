@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -134,3 +135,28 @@ def test_run_checks_runs_every_check_even_after_a_failure(tmp_path: Path) -> Non
     (repo / ".claude" / "settings.json").write_text("{nope")
     checks = run_checks(PLUGIN, repo, LAYERS, "false", tmp_path / "state", run_input)
     assert [c.passed for c in checks] == [False, True, True, True, False]
+
+
+def missing_program(cmd: list[str], cwd: Path, stdin: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(cmd, 127, "", f"{cmd[0]}: not found (boom)")
+
+
+def test_guard_fails_naming_a_missing_node(tmp_path: Path) -> None:
+    check = check_guard(PLUGIN, repo_with(tmp_path, LAYERS), LAYERS, missing_program)
+    assert not check.passed and "node: not found" in check.detail
+
+
+def test_context_warn_fails_naming_a_missing_node(tmp_path: Path) -> None:
+    check = check_context_warn(PLUGIN, tmp_path, missing_program)
+    assert not check.passed and "node: not found" in check.detail
+
+
+def test_tests_fail_naming_a_missing_shell(tmp_path: Path) -> None:
+    check = check_tests(tmp_path, "true", missing_program)
+    assert not check.passed and "sh: not found" in check.detail and "may predate the kit" in check.detail
+
+
+def test_run_checks_reports_every_check_when_programs_are_missing(tmp_path: Path) -> None:
+    repo = repo_with(tmp_path, LAYERS)
+    checks = run_checks(PLUGIN, repo, LAYERS, "true", tmp_path / "state", missing_program)
+    assert [c.passed for c in checks] == [True, False, False, True, False]
