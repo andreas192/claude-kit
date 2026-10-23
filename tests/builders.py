@@ -88,3 +88,7 @@ def merge_branch(repo: Path, name: str, files: dict[str, str], subject: str, dat
     commit(repo, files, f"work on {name}", date)
     git(repo, "checkout", "main")
     git(repo, "merge", "--no-ff", "-m", subject, name, date=date)
+
+
+def tag(repo: Path, name: str) -> None:
+    git(repo, "tag", name)
