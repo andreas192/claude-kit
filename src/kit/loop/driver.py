@@ -296,6 +296,8 @@ class _Run:
     def once(self) -> str | None:
         if over_limit(self.usage):
             return "limit"
+        if _on_weekend(self.env):
+            return "weekend"
         prs, branches = _snapshot(self.env)
         _clean(self.env)
         branch = unfinished(branches, prs, _live(self.env, branches, prs))

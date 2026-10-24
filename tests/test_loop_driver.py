@@ -772,9 +772,24 @@ def test_sunday_run_makes_no_claude_call(tmp_path):
 
 
 def test_stage_ending_on_saturday_is_followed_by_none(tmp_path):
-    # FakeEnv.now returns Friday 23:00 until its claude() has run the spec stage, then Saturday 00:05
-    reason, fake = run_fake(tmp_path, saturday_after="spec")
+    # FakeEnv.clock returns Friday 23:00 until its claude() has run the spec stage, then Saturday 00:05
+    reason, fake = run_fake(tmp_path, saturday_after="spec", spec=[step()])
     assert reason == "weekend" and fake.stages == ["probe", "spec"]
+    assert read_status(fake.worktree / ".loop" / "status.json").stage == "plan"
+
+
+def test_item_finishing_on_saturday_picks_no_next_item(tmp_path):
+    reason, fake = run_fake(
+        tmp_path,
+        roadmap=ROADMAP_A_AND_B_OPEN,
+        saturday_after="pr",
+        spec=[step()],
+        plan=[step()],
+        build=[step()],
+        pr=[step("LOOP: ok https://x/pull/1", commit=False, opens=True)],
+    )
+    assert reason == "weekend" and fake.stages == ["probe", "spec", "plan", "build", "pr"]
+    assert not any("loop/row-b" in line for line in fake.lines())
 
 
 def test_weekend_ok_overrides(tmp_path):
