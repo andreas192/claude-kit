@@ -11,7 +11,7 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
 - test-layer guard hook: rules read from the repo's `.claude/test-layers.json`
 - token benchmarks: `kit bench`
 - roadmap: `docs/roadmap.md`, one format for every repo, checked by `kit roadmap`
-- feature loop: `kit loop`, runs roadmap items as draft PRs on weekdays under launchd
+- feature loop: `kit loop`, runs roadmap items as PRs on weekdays under launchd
 - starter files: CLAUDE.md skeleton, `docs/code-conventions.md`, `docs/token-strategy.md`, base permissions (copied by `apply` only where missing)
 
 Agents are `kit:implementer-haiku`, `kit:implementer-sonnet`, `kit:reviewer-sonnet`.

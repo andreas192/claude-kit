@@ -27,10 +27,11 @@ uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key> [--
 - `loop install|uninstall`: write or remove `com.kit.loop.<repo-name>.plist` and load or unload it with `launchctl`. `--no-launchctl` only writes the file.
 - `loop status`: launchd state and the last 20 lines of `loop.log`.
 - `--kit-home DIR` defaults to `~/.claude/kit`.
+- `loop run --no-handover` is internal: the driver passes it when it re-executes into a newer snapshot.
 
 ## Loop
 
-`kit loop` runs the feature loop for a repo that has a `loop` section in `.claude/kit.json` and a `docs/roadmap.md`. Each run takes the first `open` roadmap item, works it on the `loop/<key>` branch in a worktree (spec, plan, build, PR), and opens a draft PR.
+`kit loop` runs the feature loop for a repo that has a `loop` section in `.claude/kit.json` and a `docs/roadmap.md`. Each run takes the first `open` roadmap item, works it on the `loop/<key>` branch in a worktree (spec, plan, build, PR), and opens a PR (a draft only when the item is parked).
 
 Runtime files live in `~/.claude/kit/loop/<repo-name>/`, never in the repo:
 
@@ -47,9 +48,14 @@ The scheduled agent runs on weekdays only, from the applied version's snapshot (
 
 ### Resume a parked item
 
-A spec question the loop cannot answer parks the item as a draft PR. The PR body and the spec on the loop branch list the questions under `## Questions for the owner`.
+A spec question the loop cannot answer parks the item as a draft PR; `resume` leads to a PR that `gh pr ready` moves out of draft. The PR body and the spec on the loop branch list the questions under `## Questions for the owner`.
 
 1. Check out `loop/<key>` and answer each question in the spec, so that `## Questions for the owner` is empty. Commit and push the branch.
 2. Run `uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key>`. It sets the branch's status back to stage `spec`, commits and pushes. The next weekday run finishes the spec and carries on.
 
 `kit loop resume` refuses while a run holds the lock.
+
+## Release
+
+1. Bump the version in `plugin/.claude-plugin/plugin.json`, `pyproject.toml` and `src/kit/__init__.py`. Then run `uv lock` to refresh `uv.lock`.
+2. Commit, then `git tag vX.Y.Z`.
