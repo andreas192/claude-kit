@@ -14,6 +14,7 @@ The feature loop (`dividend-growth/scripts/feature_loop.py`, run every 5 hours b
 - `kit roadmap <repo>` checks the file and shows what the loop would pick next, and why it skips each other open item.
 - `kit loop` runs the loop for any kit repo, using that repo's settings from `.claude/kit.json`, at the kit version the repo has applied.
 - dividend-growth's loop moves to the kit without losing in-flight work: the existing `loop/*` branches and their `.loop/status.json` resume.
+- The work is split by who decides. On weekdays the loop takes the features and fixes that need no decision from the owner. Anything that needs one waits for the owner, who takes it on at the weekend, and `kit roadmap` lists it as the owner's weekend list.
 
 ## Non-goals
 
@@ -27,6 +28,8 @@ The feature loop (`dividend-growth/scripts/feature_loop.py`, run every 5 hours b
 
 - The loop running code from the kit's working tree. Editing the kit must change no repo's loop until a new tag is applied (same rule as the plugin).
 - A loop that picks an item the owner marked blocked or is working on.
+- A loop that makes a call only the owner can make, i.e. one that changes what gets built, and ships it in a PR. It parks instead.
+- A loop session starting on a Saturday or Sunday.
 - Losing or restarting an in-flight loop branch because the roadmap moved.
 - The loop writing outside its checkout, or to a path the repo forbids (`../investment` and `../capital-trading` from dividend-growth).
 
@@ -59,8 +62,12 @@ Path: `docs/roadmap.md` in every kit repo. Fixed, not configurable.
 P/E and P/FCF against the company's own 10-year median ...
 
 ### Host port for the UI
+- Status: owner
+- Blocked by: whether to recreate the cluster with a port mapping in investment's cluster.tf
+
+### Excess-return backtest of the score
 - Status: blocked
-- Blocked by: owner decision; needs a port mapping in investment's cluster.tf
+- Blocked by: factor vintages from upstream (factor_returns has no as_of)
 
 ### Dividend pay dates and calendar
 - Status: done
@@ -76,13 +83,13 @@ Rules:
 
 | Field | Required | Values |
 |---|---|---|
-| Status | yes | `open` (ready; the loop may take it), `active` (someone is working on it outside the loop), `blocked`, `done`, `dropped` |
-| Blocked by | when `blocked`, and only then | free text: the decision, input or upstream data it waits for |
+| Status | yes | `open` (needs no decision from the owner; the loop may take it), `owner` (needs the owner: a decision, an input such as screenshots, or the owner's own hands; a weekend item), `blocked` (waits on something other than the owner, e.g. upstream data or another item), `active` (someone is working on it outside the loop), `done`, `dropped` |
+| Blocked by | when `owner` or `blocked`, and only then | free text: the decision, input or upstream data it waits for |
 | Depends on | no | comma-separated item titles from the same file |
-| Loop | no | `no`: ready, but the owner wants to do it in person |
 | Spec, Plan, PR | no | a path or URL. Set when the work starts or lands |
 
-- Validation errors: an unknown field, a missing or unknown Status, `Blocked by` missing on a blocked item or present on any other, a duplicate title or key, a `Depends on` title that is not in the file.
+- Validation errors: an unknown field, a missing or unknown Status, `Blocked by` missing on an `owner` or `blocked` item or present on any other, a duplicate title or key, a `Depends on` title that is not in the file.
+- An item is `open` only when it needs no decision from the owner. When unsure, mark it `owner`: on the weekend the owner can turn it into `open` with the answer written into the body.
 - Whoever lands an item sets `Status: done` and fills in Spec, Plan and PR in the same PR: the loop's PR stage, or the owner's session. The starter CLAUDE.md says so in one line.
 
 ### `kit roadmap <repo>` (read-only)
@@ -91,17 +98,34 @@ It validates `docs/roadmap.md` and prints, as counts and titles only:
 
 - the number of items per status,
 - the item the loop would pick next, given the repo's `loop/*` branches and PRs (`gh pr list`, through the injected runner),
-- each open item it would skip, with the reason: `taken by <PR url or branch>`, `depends on <title> (<status>)`, `Loop: no`.
+- each open item it would skip, with the reason: `taken by <PR url or branch>`, `depends on <title> (<status>)`,
+- **For you this weekend**: the `owner` items with their `Blocked by`, then the parked loop PRs (drafts) with their URL and park reason, including the owner questions the spec stage left (see below).
 
 It exits 1 with each error's line number if the file does not validate.
 
 ### The pick becomes deterministic
 
-dividend-growth's pick stage is a Sonnet session that reads the roadmap and judges what is blocked. With explicit statuses the driver picks in code: the first item in file order that has `Status: open`, no `Loop: no`, every `Depends on` item `done`, and no `loop/<key>` branch or PR in any state. This saves one session per run and makes `kit roadmap` show exactly what the loop will do.
+dividend-growth's pick stage is a Sonnet session that reads the roadmap and judges what is blocked. With explicit statuses the driver picks in code: the first item in file order that has `Status: open`, every `Depends on` item `done`, and no `loop/<key>` branch or PR in any state. This saves one session per run and makes `kit roadmap` show exactly what the loop will do.
 
-What the LLM used to judge ("needs upstream data not in GOLD_SCHEMA.md", "needs the cluster or Terraform") becomes `Status: blocked` with a `Blocked by` line, set when the roadmap is converted or the item is added. The spec stage can still park an item it finds it cannot design. The parked draft PR keeps the item taken, as today.
+What the LLM used to judge becomes an explicit status, set when the roadmap is converted or the item is added: "needs an owner decision or input" becomes `Status: owner`, and "needs upstream data not in GOLD_SCHEMA.md" or "needs the cluster or Terraform" becomes `Status: blocked`, each with a `Blocked by` line. The parked draft PR keeps the item taken, as today.
 
-When no item is left, the driver writes the note itself from the roadmap and the PR list: the blocked items with their `Blocked by`, the `Loop: no` items, and the parked and waiting loop PRs by URL. It posts the note as dividend-growth's loop does today: a comment on the newest loop PR, or a notification when there is none, and only when the note changed.
+When no item is left, the driver writes the note itself from the roadmap and the PR list: the `owner` and `blocked` items with their `Blocked by`, and the parked and waiting loop PRs by URL.
+
+### The loop never makes the owner's calls
+
+Today the spec stage answers every brainstorming question itself and records each answer under `## Calls made for the owner`. That changes. The spec stage sorts each open question into the brainstorming skill's three piles:
+
+- **Answered already** by CLAUDE.md, the roadmap item or the repo: the spec records the answer.
+- **Minor**: a sensible builder could settle it without changing what gets built. The spec stage settles it and records it under `## Calls made for the owner`, with `Rejected:` and the alternative, as today.
+- **The owner's**: only the owner can answer, and the answer changes what gets built (scope, a user-visible behaviour, a rule in CLAUDE.md, a new dependency or data source, cost). The spec stage does not answer it. It commits the spec draft with a `## Questions for the owner` section, one bullet per question with its recommended answer, and replies `LOOP: park owner questions`.
+
+The driver opens the parked draft PR as today, with the questions copied into its body, so the weekend list shows them. At the weekend the owner answers the questions, either by building the item in a session or by handing it back to the loop. To hand it back, the owner writes the answers into the spec on the loop branch, which empties `## Questions for the owner`, then runs `kit loop resume <repo> <key>`. That command records the branch's status file with stage `spec` on the branch, so on Monday the spec stage finishes the spec with the answers and the loop carries on. Whether to build or hand back is the owner's choice per item. The PR-stage gate also checks that the spec has no non-empty `## Questions for the owner` section; a spec with one parks.
+
+### Weekdays only
+
+- The launchd plist uses `StartCalendarInterval` entries for Monday to Friday only, at the hours `interval_hours` gives from 00:00 (5 → 00:00, 05:00, 10:00, 15:00, 20:00). `StartInterval` cannot skip days, so it is no longer used.
+- The driver checks the local weekday before it starts any stage, the probe included. On Saturday and Sunday it starts none and logs `stopped: weekend`. A stage already running when Saturday begins finishes, and the driver starts no next stage after it. The branch resumes on Monday.
+- `kit loop run <repo>` honours the same check. `--weekend-ok` overrides it for a run the owner starts by hand. It posts the note as dividend-growth's loop does today: a comment on the newest loop PR, or a notification when there is none, and only when the note changed.
 
 ### The loop in the kit
 
@@ -110,7 +134,7 @@ The stage machine, status file, PR handling, usage limits and failure policy car
 - the `loop/` branch prefix and key rule,
 - `.loop/status.json` on the branch, with the same fields,
 - the spec and plan paths `docs/superpowers/{specs,plans}/<date>-<key>...`,
-- the `## Calls made for the owner` gate before the PR stage,
+- the `## Calls made for the owner` gate before the PR stage (now with the questions check above),
 - the stage list (`spec`, `plan`, `build`, `pr`) and the `LOOP:` reply protocol (no `pick` reply any more),
 - the worktree `.claude/worktrees/feature-loop`.
 
@@ -134,7 +158,7 @@ The prompts become kit templates. Everything specific to dividend-growth moves i
 | `forbidden_paths` | no (default none) | the "never write" rule in every prompt, and `Edit`/`Write` deny rules in the generated settings, resolved to absolute paths |
 | `read_first` | no | files the spec stage reads before designing (replaces `{gold_schema}`) |
 | `pr_checklist` | no | extra numbered steps in the PR stage, between the test run and `gh pr create` |
-| `interval_hours` | no (default 5) | launchd `StartInterval` |
+| `interval_hours` | no (default 5) | the weekday run hours in the plist (see Weekdays only) |
 
 In the prompts, "the expert dividend growth investor of CLAUDE.md" becomes "the domain expert CLAUDE.md describes", and "the investor view" becomes "the user's view". Each prompt that runs tests uses `test_command` from `kit.json`.
 
@@ -155,7 +179,7 @@ Allow and deny lists are unioned, and deny wins. This replaces `feature_loop.sh`
 - `kit apply` exports the tag's `loop/` folder (driver and prompts) into the snapshot `~/.claude/kit/<version>/loop/`, beside the plugin marketplace. The snapshot stays immutable.
 - `kit loop install <repo>` needs a `loop` section and a valid roadmap. It writes `com.kit.loop.<repo-name>.plist`, which runs the snapshot's driver for the repo's latest applied version, and loads it. It refuses while another launchd agent in `~/Library/LaunchAgents` runs a loop for the same repo path (dividend-growth's `com.dgi.feature-loop`), and says which command removes it.
 - Each run, the driver reads `.claude/kit.json` on `origin/<base_branch>`. If its latest version is newer than the running driver's and that snapshot exists, it hands over to that driver for the run. A new kit version therefore reaches the loop when its apply PR merges, the same moment `kit bench` starts the new window.
-- `kit loop uninstall <repo>`, `kit loop status <repo>` (launchd state plus the last 20 log lines) and `kit loop run <repo> [--pick-only]` (one run in the foreground; `--pick-only` prints the pick and stops) complete the command.
+- `kit loop resume <repo> <key>` (above), `kit loop uninstall <repo>`, `kit loop status <repo>` (launchd state plus the last 20 log lines) and `kit loop run <repo> [--pick-only]` (one run in the foreground; `--pick-only` prints the pick and stops) complete the command.
 - Notifications are titled `kit loop: <repo-name>`.
 
 ### Migration in `kit apply`
@@ -173,7 +197,7 @@ Done once per repo, in a session inside that repo, on the apply branch before me
 
 - Every open, active and blocked item from the old files becomes an item. Done items get one line each with their links, so the history stays readable; long research tables stay in their spec and the item links to them.
 - **Titles of items with a `loop/*` branch keep the old first-cell text exactly**, so their keys, and so their branches and PRs, still match. On 2026-10-24 those are the 7 branches under `loop/` in dividend-growth (automatic classification, backtesting, dividend pay dates, holdings and income projection, regime or beta, two-stage DDM, valuation against own history).
-- What the old pick prompt judged as blocked becomes `Status: blocked` with a `Blocked by` line.
+- What the old pick prompt judged as needing the owner becomes `Status: owner`, and what it judged as blocked on data or infrastructure becomes `Status: blocked`, each with a `Blocked by` line. An item that would need an owner decision to design (e.g. dividend-growth's portfolio tracker items marked "unconfirmed") is `owner` until the owner settles it.
 - The old files are replaced by a one-line pointer to `docs/roadmap.md`, so links in specs keep working. CLAUDE.md and `docs/command.md` point to the new file.
 - `kit roadmap <repo>` passes before the branch is merged.
 
@@ -197,7 +221,10 @@ The owner skipped the questions. Claude made these calls; each can be overturned
 - One fixed path, `docs/roadmap.md`. Rejected: a path set in `kit.json` (a standard that each repo can relocate is not a standard).
 - Items as `###` headings with field lines. Rejected: one table per section (dividend-growth's cells already run to several hundred characters, and a table has no room for detail).
 - A deterministic pick in code. Rejected: keeping the Sonnet pick session (a cost on every run, and its judgement of "blocked" cannot be checked in advance).
-- The `active` status and the `Loop: no` field. Rejected: inferring "someone is on it" from branch names (an owner branch such as `feat/cash-flow-coverage` does not name the item).
+- The `active` status. Rejected: inferring "someone is on it" from branch names (an owner branch such as `feat/cash-flow-coverage` does not name the item).
+- A separate `owner` status rather than `blocked` plus a "who" field. Rejected: one `blocked` status with the owner named in `Blocked by` (the weekend list would depend on parsing free text). It also replaces the `Loop: no` field: an item the owner wants to build in person is `owner`.
+- The spec stage parks on an owner question instead of answering it. Rejected: answering and flagging the call in the PR (the item would arrive already built on the guess).
+- Weekdays and the hours are machine-local time, and a stage running at Saturday 00:00 finishes. Rejected: killing it (it would leave the branch mid-stage with no commit).
 - Stage models fixed per kit version. Rejected: per-repo overrides in `kit.json` (they would change loop cost without a kit window in `kit bench`).
 - Runtime files in `~/.claude/kit/loop/<repo-name>/`. Rejected: `data/loop/` (repo-specific; investment's `data/` holds the warehouse).
 - investment gets the format now and the loop later. Rejected: installing its loop in this rollout (its guard hook and isolation rules were written for attended sessions).
