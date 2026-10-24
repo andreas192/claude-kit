@@ -43,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--no-pr", action="store_true")
     apply_parser.add_argument("--kit-home", type=Path, default=KIT_HOME)
     apply_parser.add_argument("--known-hashes", type=Path)
+    apply_parser.add_argument("--launch-agents", type=Path, default=DEFAULT_AGENTS)
     apply_parser.add_argument("--root", type=Path, default=PROJECTS_ROOT)
     roadmap = subparsers.add_parser("roadmap", help="validate docs/roadmap.md and show what the loop would pick")
     roadmap.add_argument("repo", type=Path)
@@ -74,7 +75,7 @@ def apply_command(args: argparse.Namespace) -> int:
     answers = {key: getattr(args, key) for key in FLAGS if getattr(args, key) is not None}
     ask = ask_with_default(input) if sys.stdin.isatty() else None
     result = apply(
-        args.repo, version, KIT_REPO, args.kit_home, answers, ask, not args.no_pr, load_known(args.known_hashes), args.root, run
+        args.repo, version, KIT_REPO, args.kit_home, answers, ask, not args.no_pr, load_known(args.known_hashes), args.root, args.launch_agents, run
     )
     print("\n".join([f"branch {result.branch}", f"commit {result.commit}", *map(check_line, result.checks)]))
     print(f"PR {result.pr_url or 'not opened (--no-pr)'}")

@@ -70,3 +70,20 @@ def test_ignore_bench_reports_keeps_an_existing_gitignore(tmp_path: Path) -> Non
     (tmp_path / ".claude" / "kit-bench" / ".gitignore").write_text("mine\n")
     assert ignore_bench_reports(tmp_path) == []
     assert (tmp_path / ".claude" / "kit-bench" / ".gitignore").read_text() == "mine\n"
+
+
+STARTER_SOURCE = Path(__file__).parents[1] / "starter"
+
+
+def test_the_shipped_starter_has_a_roadmap_with_the_format_and_no_items() -> None:
+    text = (STARTER_SOURCE / "docs" / "roadmap.md").read_text()
+    assert text.startswith("# Roadmap\n")
+    for status in ("open", "owner", "blocked", "active", "done"):
+        assert f"`{status}`" in text
+    assert "Spec, Plan and PR" in text
+    assert "\n### " not in text
+
+
+def test_the_shipped_starter_claude_md_points_at_the_roadmap() -> None:
+    line = "Roadmap: docs/roadmap.md. The PR that lands an item sets its Status to done and fills in Spec, Plan and PR."
+    assert line in (STARTER_SOURCE / "CLAUDE.md").read_text().splitlines()

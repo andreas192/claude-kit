@@ -64,8 +64,19 @@ def _section(title: str, lines: list[str]) -> list[str]:
     return [f"### {title}", *(lines or [NONE]), ""]
 
 
+def _optional_section(title: str, lines: list[str]) -> list[str]:
+    return _section(title, lines) if lines else []
+
+
 def pr_body(
-    version: str, m: Migration, removed_hooks: list[str], added: list[str], prose: list[str], checks: list[Check]
+    version: str,
+    m: Migration,
+    removed_hooks: list[str],
+    added: list[str],
+    prose: list[str],
+    checks: list[Check],
+    to_convert: list[str],
+    loop_notes: list[str],
 ) -> str:
     removed = [*(f"- {name}" for name in m.remove), *(f"- hook entry: {command}" for command in removed_hooks)]
     lines = [
@@ -75,6 +86,8 @@ def pr_body(
         *_section("Removed (known kit content)", removed),
         *_section("Kept as local overrides", [f"- {name}" for name in m.overrides]),
         *_section("Edit by hand on this branch", [f"- {location}" for location in prose]),
+        *_optional_section("Roadmap to convert into docs/roadmap.md", [f"- {name}" for name in to_convert]),
+        *_optional_section("Loop", [f"- {note}" for note in loop_notes]),
         *_section("Checks", [f"- {check_line(check)}" for check in checks]),
     ]
     return "\n".join(lines)

@@ -180,7 +180,7 @@ def apply_args(tmp_path: Path, target: Path, version: str = "v0.1.0") -> list[st
     return [
         "apply", str(target), "--version", version, "--test-command", "true", "--no-pr",
         "--kit-home", str(tmp_path / "kit-home"), "--root", str(tmp_path / "projects"),
-        "--known-hashes", str(known_file),
+        "--known-hashes", str(known_file), "--launch-agents", str(tmp_path / "launch-agents"),
     ]
 
 

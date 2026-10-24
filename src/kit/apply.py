@@ -12,7 +12,17 @@ from kit.detect import Ask, checked_answers, checked_ask, detect, previous_answe
 from kit.errors import KitError
 from kit.gitrun import Runner, require_dir, run_input
 from kit.kitfile import Apply, KitFile, read_kitfile, with_apply, write_kitfile
-from kit.migrate import HOOK_SCRIPTS, apply_migration, plan_migration, prose_mentions, prose_outside
+from kit.loop.schedule import loop_label, other_loop_agents
+from kit.migrate import (
+    HOOK_SCRIPTS,
+    OLD_LOOP_SCRIPT,
+    apply_migration,
+    loop_notes,
+    plan_migration,
+    prose_mentions,
+    prose_outside,
+    roadmap_files,
+)
 from kit.settings_edit import read_settings, with_kit, with_permissions, without_hook_scripts, write_settings
 from kit.snapshot import PLUGIN_NAME, parse_version, snapshot
 from kit.starter import copy_missing, ignore_bench_reports, read_starter
@@ -39,6 +49,7 @@ def apply(
     open_pr: bool,
     known: dict[str, list[str]],
     root: Path,
+    agents_dir: Path,
     run: Runner,
 ) -> ApplyResult:
     answers, ask = checked_answers(answers), checked_ask(ask)
@@ -74,6 +85,9 @@ def apply(
     write_kitfile(repo, with_apply(KitFile(resolved.test_command, kit.applies, kit.loop), recorded))
     gitops.commit_all(repo, f"chore: record claude-kit {version}", run)
 
-    body = gitops.pr_body(version, migration, removed_hooks, added, prose_outside(prose_mentions(repo, run), added), checks)
+    had_loop = OLD_LOOP_SCRIPT in (*migration.remove, *migration.overrides)
+    notes = loop_notes(had_loop, other_loop_agents(agents_dir, repo, loop_label(repo.name)), kit.loop is not None)
+    prose = prose_outside(prose_mentions(repo, run), added)
+    body = gitops.pr_body(version, migration, removed_hooks, added, prose, checks, roadmap_files(repo, run), notes)
     url = gitops.open_pr(repo, branch, f"chore: apply claude-kit {version}", body, run) if open_pr else None
     return ApplyResult(branch, commit, url, checks)
