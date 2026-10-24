@@ -13,6 +13,9 @@ Run the kit against a repo from its own `.venv`:
 uv run --project ~/Projects/Personal/claude-kit kit apply <repo> [--version vX.Y.Z]
 uv run --project ~/Projects/Personal/claude-kit kit bench <repo> --control <repo>
 uv run --project ~/Projects/Personal/claude-kit kit status
+uv run --project ~/Projects/Personal/claude-kit kit roadmap <repo>
+uv run --project ~/Projects/Personal/claude-kit kit loop run|install|uninstall|status <repo> [--kit-home DIR]
+uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key>
 ```
 
 ## Release

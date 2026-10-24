@@ -2,19 +2,22 @@
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from datetime import date
 from pathlib import Path
 
 import pytest
-from builders import assistant, commit, git, rec, tag
+from builders import add_loop_package, assistant, commit, git, rec, tag
 from test_detect import DGI_WIRING, build_repo
 
 from kit.bench.transcripts import transcript_dir_name
 from kit import cli
 from kit.cli import main
-from kit.kitfile import Apply, KitFile, read_kitfile, write_kitfile
+from kit.gitrun import run
+from kit.kitfile import Apply, KitFile, LoopConfig, read_kitfile, write_kitfile
+from kit.snapshot import snapshot
 
 APPLIED = "2026-10-18T00:00:00Z"
 
@@ -253,3 +256,131 @@ def test_apply_on_a_dirty_repo_stops_before_any_change(tmp_path, target, kit_rep
     assert main(apply_args(tmp_path, target)) == 1
     assert "error: uncommitted changes" in capsys.readouterr().err
     assert not (tmp_path / "kit-home").exists()
+
+
+ROADMAP_TEXT = "# Roadmap\n\n### Row A\n- Status: open\n\n### Row B\n- Status: owner\n- Blocked by: needs a call\n"
+
+
+def roadmap_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "rm-repo"
+    repo.mkdir()
+    git(repo, "init", "-b", "main")
+    commit(repo, {"docs/roadmap.md": ROADMAP_TEXT}, "roadmap", "2026-10-20T10:00:00Z")
+    return repo
+
+
+def fake_bin(tmp_path: Path, monkeypatch, scripts: dict[str, str]) -> Path:
+    """A PATH holding only git and the named executables, each running the shell line it is given."""
+    bin_dir = tmp_path / "fake-bin"
+    bin_dir.mkdir()
+    for name, body in scripts.items():
+        (bin_dir / name).write_text(f"#!/bin/sh\n{body}\n")
+        (bin_dir / name).chmod(0o755)
+    (bin_dir / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(bin_dir))
+    return bin_dir
+
+
+def test_roadmap_prints_counts_and_next_pick(tmp_path, monkeypatch, capsys):
+    repo = roadmap_repo(tmp_path)
+    fake_bin(tmp_path, monkeypatch, {"gh": "echo '[]'"})
+    assert main(["roadmap", str(repo)]) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "Items: 1 open, 1 owner, 0 blocked, 0 active, 0 done, 0 dropped",
+        "Next pick: Row A",
+        "For you this weekend:",
+        "- Row B: needs a call",
+    ]
+
+
+def test_roadmap_without_gh_still_prints_counts(tmp_path, monkeypatch, capsys):
+    repo = roadmap_repo(tmp_path)
+    fake_bin(tmp_path, monkeypatch, {})
+    assert main(["roadmap", str(repo)]) == 0
+    out = capsys.readouterr().out
+    assert "Items: 1 open, 1 owner" in out and "Next pick: unknown (gh: not found)" in out
+
+
+def test_roadmap_invalid_is_exit_1_with_the_line(tmp_path, capsys):
+    repo = roadmap_repo(tmp_path)
+    (repo / "docs" / "roadmap.md").write_text("# Roadmap\n\n### Row A\n- Status: nope\n")
+    assert main(["roadmap", str(repo)]) == 1
+    assert "docs/roadmap.md:3: unknown Status 'nope'" in capsys.readouterr().err
+
+
+@pytest.fixture
+def loop_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """A clone of a bare origin whose main holds a roadmap and a kit.json with a loop section, plus a v0.2.0 snapshot."""
+    origin, repo = tmp_path / "origin.git", tmp_path / "loop-repo"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", str(origin), str(repo)], check=True, capture_output=True)
+    for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        git(repo, "config", key, value)
+    write_kitfile(repo, KitFile("pytest", (Apply("v0.2.0", "abc", APPLIED),), LoopConfig("main")))
+    commit(repo, {"docs/roadmap.md": ROADMAP_TEXT}, "init", "2026-10-20T10:00:00Z")
+    git(repo, "push", "-u", "origin", "main")
+    kit = tmp_path / "loop-kit"
+    kit.mkdir()
+    git(kit, "init", "-b", "main")
+    add_loop_package(kit)
+    tag(kit, "v0.2.0", plugin_version="0.2.0")
+    snapshot(kit, "v0.2.0", tmp_path / "kit-home", run)
+    return repo, tmp_path / "kit-home"
+
+
+def test_loop_install_writes_the_plist_and_refuses_an_old_agent(tmp_path, monkeypatch, loop_repo, capsys):
+    repo, kit_home = loop_repo
+    agents, uv_dir = tmp_path / "agents", os.path.dirname(shutil.which("uv"))
+    fake_bin(tmp_path, monkeypatch, {name: "" for name in ("claude", "gh", "node")})
+    monkeypatch.setenv("PATH", f"{os.environ['PATH']}:{uv_dir}")
+    argv = ["loop", "install", str(repo), "--no-launchctl", "--launch-agents", str(agents), "--kit-home", str(kit_home)]
+    assert main(argv) == 0
+    plist = agents / "com.kit.loop.loop-repo.plist"
+    assert f"<key>PYTHONPATH</key><string>{kit_home}/v0.2.0/src</string>" in plist.read_text()
+    assert str(plist) in capsys.readouterr().out
+    (agents / "com.dgi.feature-loop.plist").write_text(f"<string>{repo.resolve()}</string>")
+    assert main(argv) == 1
+    err = capsys.readouterr().err
+    assert "com.dgi.feature-loop.plist" in err and "scripts/feature_loop.sh uninstall" in err
+
+
+def test_loop_run_pick_only_prints_the_pick_from_origin(tmp_path, monkeypatch, loop_repo, capsys):
+    repo, kit_home = loop_repo
+    fake_bin(tmp_path, monkeypatch, {"gh": "echo '[]'"})
+    argv = ["loop", "run", str(repo), "--pick-only", "--weekend-ok", "--no-handover", "--kit-home", str(kit_home)]
+    assert main(argv) == 0
+    assert "pick Row A" in capsys.readouterr().out
+    assert (kit_home / "loop" / "loop-repo" / "settings.json").is_file()
+    assert "stopped: done" in (kit_home / "loop" / "loop-repo" / "loop.log").read_text()
+
+
+def test_loop_status_prints_the_last_log_lines(tmp_path, loop_repo, capsys):
+    repo, kit_home = loop_repo
+    runtime = kit_home / "loop" / "loop-repo"
+    runtime.mkdir(parents=True)
+    (runtime / "loop.log").write_text("\n".join(f"line {i}" for i in range(30)) + "\n")
+    assert main(["loop", "status", str(repo), "--no-launchctl", "--kit-home", str(kit_home)]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[-1] == "line 29" and "line 9" not in out and "line 10" in out
+
+
+def test_loop_without_a_loop_section_is_exit_1(tmp_path, capsys):
+    repo = roadmap_repo(tmp_path)
+    assert main(["loop", "run", str(repo), "--kit-home", str(tmp_path / "home")]) == 1
+    assert "has no loop section" in capsys.readouterr().err
+
+
+def test_loop_run_hands_over_to_the_newer_snapshot_with_its_src_on_the_path(tmp_path, monkeypatch, loop_repo):
+    repo, kit_home = loop_repo
+    marker = tmp_path / "handed-over"
+    stub = f"import sys\nopen({str(marker)!r}, 'w').write(' '.join(sys.argv[1:]))\nsys.exit(7)\n"
+    src = kit_home / "v0.3.0" / "src" / "kit"
+    src.mkdir(parents=True)
+    (src / "__init__.py").write_text("")
+    (src / "cli.py").write_text(stub)
+    write_kitfile(repo, KitFile("pytest", (Apply("v0.2.0", "a", APPLIED), Apply("v0.3.0", "b", APPLIED)), LoopConfig("main")))
+    commit(repo, {}, "apply v0.3.0", "2026-10-21T10:00:00Z")
+    git(repo, "push")
+    fake_bin(tmp_path, monkeypatch, {"gh": "echo '[]'"})
+    assert main(["loop", "run", str(repo), "--weekend-ok", "--kit-home", str(kit_home)]) == 7
+    assert marker.read_text() == f"loop run {repo.resolve()} --no-handover --kit-home {kit_home} --weekend-ok"
