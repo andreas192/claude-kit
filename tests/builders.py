@@ -90,8 +90,18 @@ def merge_branch(repo: Path, name: str, files: dict[str, str], subject: str, dat
     git(repo, "merge", "--no-ff", "-m", subject, name, date=date)
 
 
-def tag(repo: Path, name: str) -> None:
+def tag(repo: Path, name: str, plugin_version: str | None = None) -> None:
+    """Tag HEAD; with plugin_version, first commit a plugin.json declaring it so the tag snapshots cleanly."""
+    if plugin_version:
+        manifest = json.dumps({"name": "kit", "version": plugin_version})
+        commit(repo, {"plugin/.claude-plugin/plugin.json": manifest}, f"release {name}", "2026-10-02T10:00:00Z")
     git(repo, "tag", name)
+
+
+def add_loop_package(repo: Path) -> None:
+    """Commit a minimal src/kit with a loop package, the shape a v0.2.0+ tag holds."""
+    files = {"src/kit/__init__.py": "", "src/kit/cli.py": "", "src/kit/loop/__init__.py": ""}
+    commit(repo, files, "add the loop package", "2026-10-02T09:00:00Z")
 
 
 # A valid docs/roadmap.md shared by the roadmap and loop unit tests.
