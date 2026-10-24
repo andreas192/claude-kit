@@ -139,6 +139,8 @@ def previous_answers(repo: Path, d: Detected) -> dict[str, str]:
         return {}
     try:
         recorded = json.loads((repo / LAYERS_PATH).read_text())["wiring_functions"]
+        if not isinstance(recorded, list) or not all(isinstance(name, str) for name in recorded):
+            return {}
         return {"wiring_functions": ",".join(recorded)}
     except (OSError, ValueError, KeyError, TypeError):
         return {}

@@ -193,7 +193,10 @@ def test_apply_puts_the_version_into_the_repo_on_a_branch(tmp_path, target, kit_
     assert subprocess.run(["git", "branch", "--show-current"], cwd=target, capture_output=True, text=True).stdout.strip() == BRANCH
     applies = json.loads((target / ".claude/kit.json").read_text())["applies"]
     assert [a["version"] for a in applies] == ["v0.1.0"] and len(applies[0]["commit"]) == 40
-    assert "kit@kit-v0-1-0" in json.loads((target / ".claude/settings.json").read_text())["enabledPlugins"]
+    settings = json.loads((target / ".claude/settings.json").read_text())
+    assert "kit@kit-v0-1-0" in settings["enabledPlugins"]
+    assert "test-layer-guard.mjs" not in json.dumps(settings.get("hooks", {})) and "context-warn.mjs" not in json.dumps(settings.get("hooks", {}))
+    assert json.loads((target / ".claude/kit.json").read_text())["test_command"] == "true"
     assert not any((target / name).exists() for name in LOCAL_HOOKS)
     assert (target / ".claude/kit-bench/baseline.json").is_file()
     assert (target / "docs/token-strategy.md").is_file() and (target / ".claude/test-layers.json").is_file()
@@ -223,6 +226,19 @@ def test_apply_a_newer_version_replaces_the_marketplace_entry(tmp_path, target, 
     settings = json.loads((target / ".claude/settings.json").read_text())
     assert list(settings["extraKnownMarketplaces"]) == ["kit-v0-1-1"] and list(settings["enabledPlugins"]) == ["kit@kit-v0-1-1"]
     assert [a["version"] for a in json.loads((target / ".claude/kit.json").read_text())["applies"]] == ["v0.1.0", "v0.1.1"]
+
+
+@needs_node
+def test_apply_with_a_failing_test_command_leaves_the_branch_and_records_nothing(tmp_path, target, kit_repo, capsys):
+    argv = apply_args(tmp_path, target)
+    argv[argv.index("--test-command") + 1] = "false"
+    assert main(argv) == 1
+    err = capsys.readouterr().err
+    assert "tests: false failed; this may predate the kit" in err
+    assert "branch chore/claude-kit-v0.1.0 left for inspection; no PR" in err
+    assert subprocess.run(["git", "branch", "--show-current"], cwd=target, capture_output=True, text=True).stdout.strip() == BRANCH
+    assert not (target / ".claude/kit.json").exists()
+    assert commits(target) == 1
 
 
 def test_apply_on_a_dirty_repo_stops_before_any_change(tmp_path, target, kit_repo, capsys):

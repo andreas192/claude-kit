@@ -177,7 +177,7 @@ def test_previous_answers_are_ignored_while_the_guard_still_says_it(dgi_repo):
     assert previous_answers(dgi_repo, detect(dgi_repo)) == {}
 
 
-@pytest.mark.parametrize("text", [None, "{oops", "[]", "{}", '{"wiring_functions": 3}'])
+@pytest.mark.parametrize("text", [None, "{oops", "[]", "{}", '{"wiring_functions": 3}', '{"wiring_functions": "run"}', '{"wiring_functions": [1]}'])
 def test_previous_answers_fall_back_to_asking_when_the_file_is_unusable(dgi_repo, text):
     (dgi_repo / ".claude/hooks/test-layer-guard.mjs").unlink()
     if text is not None:
