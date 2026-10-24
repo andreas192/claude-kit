@@ -8,8 +8,8 @@ def test_forbidden_paths_resolve_against_the_repo_not_the_worktree(tmp_path):
     repo.mkdir()
     s = loop_settings(base_settings(), {}, repo, ("../investment",), "uv run pytest -q", tmp_path / "rt")
     inv = (tmp_path / "investment").resolve()
-    assert f"Edit({inv}/**)" in s["permissions"]["deny"]
-    assert f"Write({inv}/**)" in s["permissions"]["deny"]
+    assert f"Edit(/{inv}/**)" in s["permissions"]["deny"]
+    assert f"Write(/{inv}/**)" in s["permissions"]["deny"]
 
 
 def test_repo_extras_are_unioned_without_duplicates(tmp_path):
@@ -22,7 +22,7 @@ def test_repo_extras_are_unioned_without_duplicates(tmp_path):
     assert allow.count("Read") == 1
     assert "Bash(uv run dgi *)" in allow
     assert "Bash(uv run pytest -q*)" in allow
-    assert f"Write({tmp_path / 'rt'}/**)" in allow
+    assert f"Write(/{tmp_path / 'rt'}/**)" in allow
     assert deny.count("Bash(gh api*)") == 1
     assert "env" not in s
 

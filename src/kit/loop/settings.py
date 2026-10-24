@@ -16,11 +16,17 @@ def _unique(items: list[str]) -> list[str]:
     return list(dict.fromkeys(items))
 
 
+def _absolute_rule(tool: str, path: Path) -> str:
+    # Claude Code reads a single leading "/" as relative to the settings file;
+    # an absolute filesystem path needs "//", so "/" + "/Users/..." gives "//Users/...".
+    return f"{tool}(/{path}/**)"
+
+
 def _forbidden_rules(repo: Path, forbidden: tuple[str, ...]) -> list[str]:
     rules: list[str] = []
     for path in forbidden:
         target = (repo / path).resolve()
-        rules += [f"Edit({target}/**)", f"Write({target}/**)"]
+        rules += [_absolute_rule("Edit", target), _absolute_rule("Write", target)]
     return rules
 
 
@@ -38,7 +44,7 @@ def loop_settings(
         *base_perms["allow"],
         *extra_perms.get("allow", []),
         f"Bash({test_command}*)",
-        f"Write({runtime}/**)",
+        _absolute_rule("Write", runtime),
     ]
     deny = [
         *base_perms["deny"],
