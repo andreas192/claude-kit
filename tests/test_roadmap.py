@@ -1,33 +1,10 @@
 """UNIT: kit.roadmap, the docs/roadmap.md parser and validator."""
 
 import pytest
+from builders import GOOD
 
 from kit.errors import KitError
 from kit.roadmap import RoadmapError, item_key, parse_roadmap, read_roadmap
-
-GOOD = """# Roadmap
-
-## Features
-
-### Two-stage dividend discount model
-- Status: open
-
-Body text.
-
-### Valuation against the company's own history
-- Status: open
-- Depends on: Two-stage dividend discount model
-
-### Host port for the UI
-- Status: owner
-- Blocked by: whether to recreate the cluster
-
-## Known data bugs
-
-### Dividend pay dates and calendar
-- Status: done
-- Spec: docs/superpowers/specs/2026-10-18-dividend-pay-dates-and-calendar-design.md
-"""
 
 
 def test_parse_keeps_file_order_sections_and_fields():

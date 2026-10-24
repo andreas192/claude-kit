@@ -92,3 +92,29 @@ def merge_branch(repo: Path, name: str, files: dict[str, str], subject: str, dat
 
 def tag(repo: Path, name: str) -> None:
     git(repo, "tag", name)
+
+
+# A valid docs/roadmap.md shared by the roadmap and loop unit tests.
+GOOD = """# Roadmap
+
+## Features
+
+### Two-stage dividend discount model
+- Status: open
+
+Body text.
+
+### Valuation against the company's own history
+- Status: open
+- Depends on: Two-stage dividend discount model
+
+### Host port for the UI
+- Status: owner
+- Blocked by: whether to recreate the cluster
+
+## Known data bugs
+
+### Dividend pay dates and calendar
+- Status: done
+- Spec: docs/superpowers/specs/2026-10-18-dividend-pay-dates-and-calendar-design.md
+"""
