@@ -9,6 +9,7 @@ from kit.loop.state import (
     is_live,
     new_status,
     next_stage,
+    owner_questions,
     read_status,
     resume_stage,
     unfinished,
@@ -69,3 +70,17 @@ def test_has_calls_section():
     assert not has_calls_section(good.replace("Rejected: score input", "score input"))
     assert not has_calls_section("## Goals\n- x. Rejected: y")
     assert not has_calls_section("## Calls made for the owner\n\n## Next")
+
+
+def test_owner_questions_reads_bullets_until_the_next_section():
+    text = "## Calls made for the owner\n- a Rejected: b\n\n## Questions for the owner\n- Include REITs? Recommended: no\n- Cap? Recommended: 6%\n\n## Plan\n- not a question\n"
+    assert owner_questions(text) == ["Include REITs? Recommended: no", "Cap? Recommended: 6%"]
+    assert owner_questions("## Questions for the owner\n\n## Next\n") == []
+
+
+def test_owner_questions_is_empty_without_the_heading():
+    assert owner_questions("## Calls made for the owner\n- a Rejected: b\n") == []
+
+
+def test_owner_questions_collapses_inner_whitespace_to_single_spaces():
+    assert owner_questions("## Questions for the owner\n-   Cap?\tRecommended:   6%  \n") == ["Cap? Recommended: 6%"]

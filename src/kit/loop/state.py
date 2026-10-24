@@ -6,7 +6,7 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from kit.loop.prs import Pr
+from kit.loop.prs import QUESTIONS_HEADING, Pr
 from kit.roadmap import item_key
 
 STAGES = ("spec", "plan", "build", "pr")
@@ -62,14 +62,24 @@ def new_status(title: str, today: str) -> Status:
     return Status(key, title, "spec", spec, plan)
 
 
-def has_calls_section(spec_text: str) -> bool:
+def _bullets(spec_text: str, heading: str) -> list[str]:
+    """The `- ` lines under `heading` up to the next `## ` section."""
     lines = spec_text.splitlines()
-    if CALLS_HEADING not in lines:
-        return False
+    if heading not in lines:
+        return []
     body = []
-    for line in lines[lines.index(CALLS_HEADING) + 1 :]:
+    for line in lines[lines.index(heading) + 1 :]:
         if line.startswith("## "):
             break
         body.append(line)
-    bullets = [line for line in body if line.startswith("- ")]
+    return [line for line in body if line.startswith("- ")]
+
+
+def has_calls_section(spec_text: str) -> bool:
+    bullets = _bullets(spec_text, CALLS_HEADING)
     return bool(bullets) and all("Rejected:" in b for b in bullets)
+
+
+def owner_questions(spec_text: str) -> list[str]:
+    """One line per question, so the park note in the draft PR body reads back the same."""
+    return [" ".join(b[2:].split()) for b in _bullets(spec_text, QUESTIONS_HEADING)]

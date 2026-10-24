@@ -123,6 +123,8 @@ class FakeEnv:
         ]
         if "--head" in cmd:
             rows = [r for r in rows if r["headRefName"] == cmd[cmd.index("--head") + 1]]
+        if cmd[cmd.index("--state") + 1 :][:1] == ["open"]:
+            rows = [r for r in rows if r["state"] == "OPEN"]
         return json.dumps(rows)
 
     def sh(self, cmd: list[str]) -> str:
@@ -210,14 +212,35 @@ def scripts(**more) -> dict:
     return {"probe": [step(commit=False)], **more}
 
 
-def run_fake(tmp_path, roadmap: str = ROADMAP_A_OPEN, prs=(), branches=(), spec_text=GOOD_SPEC, **stages):
+def run_fake(
+    tmp_path,
+    roadmap: str = ROADMAP_A_OPEN,
+    prs=(),
+    branches=(),
+    spec_text=GOOD_SPEC,
+    resume_branch: str | None = None,
+    open_prs=(),
+    stage: str = "build",
+    **stages,
+):
+    """Run the loop; resume_branch starts it on a live branch at `stage`, holding the open_prs given as gh rows."""
+    if resume_branch:
+        roadmap, branches = ROADMAP_A_ACTIVE, [*branches, resume_branch]
+        stages = {"pr": [step(commit=False), step(commit=False)], **stages}
     f = FakeEnv(tmp_path, scripts(**stages), prs=prs, branches=branches, roadmap=roadmap, spec_text=spec_text)
+    if resume_branch:
+        f.tips[resume_branch] = json.dumps({"stage": stage})
+        resume_status(f, stage)
+        for row in open_prs:
+            f.branch = resume_branch
+            f.prs.append(Pr(row["number"], resume_branch, "OPEN", f"2026-10-17T10:{row['number']:02d}", "u", "", row["isDraft"]))
     return run(f.env()), f
 
 
-def full_item(tmp_path) -> tuple[str, FakeEnv]:
+def full_item(tmp_path, spec_text=GOOD_SPEC) -> tuple[str, FakeEnv]:
     return run_fake(
         tmp_path,
+        spec_text=spec_text,
         spec=[step()],
         plan=[step()],
         build=[step("LOOP: more"), step()],
@@ -490,7 +513,7 @@ def test_pr_ok_without_a_pr_is_a_failure(tmp_path):
     reason, f = run_fake(
         tmp_path, spec=[step()], plan=[step()], build=[step()], pr=[step(commit=False), step(commit=False)]
     )
-    assert reason == "env" and any("no PR exists" in m for m in f.logs)
+    assert reason == "env" and any("no ready PR exists" in m for m in f.logs)
 
 
 def test_none_key_skips_the_pick_until_the_roadmap_or_prs_change(tmp_path):
@@ -548,7 +571,57 @@ def test_pr_ok_needs_an_open_pr_not_an_old_merged_one(tmp_path):
     f = FakeEnv(tmp_path, scripted, prs=[merged], branches=["loop/a"], roadmap=ROADMAP_A_ACTIVE)
     f.tips["loop/a"] = json.dumps({"stage": "pr"})
     resume_status(f, "pr")
-    assert run(f.env()) == "env" and any("no PR exists" in m for m in f.logs)
+    assert run(f.env()) == "env" and any("no ready PR exists" in m for m in f.logs)
+
+
+def test_spec_with_owner_questions_parks_with_them_in_the_draft(tmp_path):
+    spec = GOOD_SPEC + "\n## Questions for the owner\n- Include REITs? Recommended: no\n"
+    reason, fake = full_item(tmp_path, spec_text=spec)
+    body = fake.drafts()[-1][fake.drafts()[-1].index("--body") + 1]
+    assert "owner questions in" in body and "- Include REITs? Recommended: no" in body
+    assert "pr" not in fake.stages
+    assert parse_park_body(body).questions == ("Include REITs? Recommended: no",)
+
+
+def test_owner_questions_park_before_the_calls_check(tmp_path):
+    spec = "# Spec\n\n## Questions for the owner\n- Cap?\n"
+    reason, fake = full_item(tmp_path, spec_text=spec)
+    body = fake.drafts()[-1][fake.drafts()[-1].index("--body") + 1]
+    assert "Parked: owner questions in docs/superpowers/specs/2026-10-17-row-a-design.md" in body
+
+
+def test_an_answered_spec_with_an_empty_questions_section_goes_on_to_the_pr(tmp_path):
+    reason, fake = full_item(tmp_path, spec_text=GOOD_SPEC + "\n## Questions for the owner\n\n")
+    assert fake.drafts() == [] and "pr" in fake.stages
+
+
+def test_pr_stage_with_only_a_draft_open_is_a_failure(tmp_path):
+    reason, fake = run_fake(tmp_path, resume_branch="loop/row-a", open_prs=[{"number": 3, "isDraft": True}], stage="pr")
+    assert any("pr stage reported ok but no ready PR exists" in line for line in fake.logs)
+    assert "gh pr list --head loop/row-a --state open --json number,isDraft" in fake.lines()
+
+
+def test_pr_stage_with_a_ready_pr_open_is_done(tmp_path):
+    reason, fake = run_fake(
+        tmp_path,
+        resume_branch="loop/row-a",
+        open_prs=[{"number": 3, "isDraft": True}, {"number": 4, "isDraft": False}],
+        stage="pr",
+        pr=[step(commit=False)],
+    )
+    assert reason == "done" and not any("no ready PR" in m for m in fake.logs)
+
+
+def test_spec_prompt_asks_for_the_three_piles_and_finishes_an_answered_spec(tmp_path):
+    text = render("spec", env_with(LoopConfig("develop")), row="R", spec="docs/s.md")
+    assert "## Questions for the owner" in text and "LOOP: park owner questions" in text
+    assert "If `docs/s.md` already exists, the owner answered its questions in it" in text and "{" not in text
+
+
+def test_pr_prompt_readies_an_existing_draft_instead_of_creating(tmp_path):
+    text = render("pr", env_with(LoopConfig("develop")), row="R", key="r", branch="loop/r", spec="s", plan="p")
+    assert "gh pr edit loop/r --title" in text and "--body-file" in text and "gh pr ready loop/r" in text
+    assert "{" not in text
 
 
 def test_probe_error_is_an_env_failure_with_detail_and_one_notice(tmp_path):
@@ -627,7 +700,7 @@ def test_pr_prompt_numbers_the_checklist_between_the_test_run_and_the_create(tmp
 def test_pr_prompt_writes_the_body_to_the_runtime_and_ends_it_with_the_attribution(tmp_path):
     env = env_with(LoopConfig("develop"), tmp_path / "rt")
     text = render("pr", env, row="R", key="r", branch="loop/r", spec="s", plan="p")
-    assert text.count(f"{tmp_path}/rt/pr-body.md") == 2 and "--body-file" in text
+    assert text.count(f"{tmp_path}/rt/pr-body.md") == 3 and "--body-file" in text
     assert "the user's view" in text and "investor" not in text and ATTRIBUTION in text
 
 

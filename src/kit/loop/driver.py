@@ -24,6 +24,7 @@ from kit.loop.state import (
     is_live,
     new_status,
     next_stage,
+    owner_questions,
     read_status,
     resume_stage,
     unfinished,
@@ -172,7 +173,8 @@ def _save_stage(env: Env, branch: str, status: Status, stage: str) -> None:
 
 def _open_draft(env: Env, branch: str, status: Status | None, reason: str) -> None:
     key = status.key if status else branch.removeprefix("loop/")
-    body = park_body(reason, status.spec if status else "", status.plan if status else "", [])
+    spec, plan = (status.spec, status.plan) if status else ("", "")
+    body = park_body(reason, spec, plan, owner_questions(_read(env.worktree / spec)) if spec else [])
     title = f"loop (parked): {status.row if status else key}"
     cmd = ["gh", "pr", "create", "--draft", "--base", env.config.base_branch, "--title", title, "--body", body]
     env.sh([*cmd, "--head", branch])
@@ -200,8 +202,9 @@ def _branch_prs(env: Env, branch: str, fields: str) -> list[dict]:
     return json.loads(env.sh(["gh", "pr", "list", "--head", branch, "--state", "all", "--json", fields]))
 
 
-def _open_prs(env: Env, branch: str) -> list[dict]:
-    return [p for p in _branch_prs(env, branch, "number,state") if p["state"] == "OPEN"]
+def _ready_prs(env: Env, branch: str) -> list[dict]:
+    open_prs = json.loads(env.sh(["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number,isDraft"]))
+    return [p for p in open_prs if not p["isDraft"]]
 
 
 def _record_opened(env: Env, branch: str) -> None:
@@ -326,7 +329,10 @@ class _Run:
     def step(self, stage: str, branch: str, status: Status | None) -> StageResult:
         env = self.env
         if stage == "pr":
-            if status and not has_calls_section(_read(env.worktree / status.spec)):
+            spec_text = _read(env.worktree / status.spec) if status else ""
+            if owner_questions(spec_text):
+                return StageResult("park", f"owner questions in {status.spec}", self.usage)
+            if status and not has_calls_section(spec_text):
                 why = "spec has no 'Calls made for the owner' with rejected alternatives"
                 return StageResult("park", why, self.usage)
             _drop_status(env, branch)
@@ -337,8 +343,8 @@ class _Run:
         _push_if_ahead(env, branch)
         if r.outcome in ("ok", "more") and stage != "pr" and env.sh(["git", "rev-parse", "HEAD"]) == head:
             return StageResult("error", "stage made no commit", r.usage)
-        if r.outcome == "ok" and stage == "pr" and not _open_prs(env, branch):
-            return StageResult("error", "pr stage reported ok but no PR exists", r.usage)
+        if r.outcome == "ok" and stage == "pr" and not _ready_prs(env, branch):
+            return StageResult("error", "pr stage reported ok but no ready PR exists", r.usage)
         return r
 
     def work(self, branch: str, status: Status | None, stage: str) -> str | None:
