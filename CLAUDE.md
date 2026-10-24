@@ -8,6 +8,8 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
 
 - Spec: `docs/superpowers/specs/2026-10-18-claude-kit-design.md`
 - Plan index: `docs/superpowers/plans/2026-10-18-claude-kit.md`
+- Spec: `docs/superpowers/specs/2026-10-24-roadmap-and-loop-design.md`
+- Plan: `docs/superpowers/plans/2026-10-24-roadmap-and-loop.md`
 
 ## Global Constraints
 

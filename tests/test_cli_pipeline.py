@@ -153,7 +153,7 @@ def kit_repo(tmp_path: Path, monkeypatch) -> Path:
     git(repo, "init", "-b", "main")
     git(repo, "add", "-A")
     git(repo, "commit", "-m", "release")
-    tag(repo, "v0.1.0")
+    tag(repo, "v0.1.0", plugin_version="0.1.0")
     monkeypatch.setattr(cli, "KIT_REPO", repo)
     return repo
 
