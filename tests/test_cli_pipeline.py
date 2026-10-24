@@ -14,7 +14,7 @@ from test_detect import DGI_WIRING, build_repo
 from kit.bench.transcripts import transcript_dir_name
 from kit import cli
 from kit.cli import main
-from kit.kitfile import Apply, KitFile, write_kitfile
+from kit.kitfile import Apply, KitFile, read_kitfile, write_kitfile
 
 APPLIED = "2026-10-18T00:00:00Z"
 
@@ -218,11 +218,15 @@ def test_apply_twice_stops_with_already_on_and_adds_no_commit(tmp_path, target, 
 @needs_node
 def test_apply_a_newer_version_replaces_the_marketplace_entry(tmp_path, target, kit_repo):
     assert main(apply_args(tmp_path, target)) == 0
+    kit_path = target / ".claude/kit.json"
+    kit_path.write_text(json.dumps({**json.loads(kit_path.read_text()), "loop": {"base_branch": "develop"}}, indent=2) + "\n")
+    git(target, "commit", "-am", "loop section")
     manifest = kit_repo / "plugin/.claude-plugin/plugin.json"
     manifest.write_text(manifest.read_text().replace("0.1.0", "0.1.1"))
     git(kit_repo, "commit", "-am", "release 0.1.1")
     tag(kit_repo, "v0.1.1")
     assert main(apply_args(tmp_path, target, "v0.1.1")) == 0
+    assert read_kitfile(target).loop.base_branch == "develop"
     settings = json.loads((target / ".claude/settings.json").read_text())
     assert list(settings["extraKnownMarketplaces"]) == ["kit-v0-1-1"] and list(settings["enabledPlugins"]) == ["kit@kit-v0-1-1"]
     assert [a["version"] for a in json.loads((target / ".claude/kit.json").read_text())["applies"]] == ["v0.1.0", "v0.1.1"]

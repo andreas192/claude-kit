@@ -5,7 +5,7 @@ import json
 import pytest
 
 from kit.errors import KitError
-from kit.kitfile import Apply, KitFile, read_kitfile, with_apply, write_kitfile
+from kit.kitfile import Apply, KitFile, LoopConfig, parse_kitfile, read_kitfile, with_apply, write_kitfile
 
 
 def test_with_apply_appends_and_refuses_the_same_version():
@@ -48,4 +48,36 @@ def test_read_kitfile_bad_json_is_a_kit_error_naming_the_file(tmp_path):
 def test_read_kitfile_missing_key_is_a_kit_error(tmp_path):
     kit_json(tmp_path, json.dumps({"test_command": "t"}))
     with pytest.raises(KitError, match="invalid kit.json: missing 'applies'"):
+        read_kitfile(tmp_path)
+
+
+LOOP = {"base_branch": "develop", "forbidden_paths": ["../investment"], "interval_hours": 5}
+
+
+def test_loop_section_round_trips(tmp_path):
+    kit = parse_kitfile(json.dumps({"test_command": "t", "applies": [], "loop": LOOP}))
+    assert kit.loop == LoopConfig("develop", ("../investment",))
+    write_kitfile(tmp_path, with_apply(kit, Apply("v0.2.0", "c", "2026-10-24T00:00:00Z")))
+    assert read_kitfile(tmp_path).loop == kit.loop
+
+
+def test_write_omits_loop_when_unset(tmp_path):
+    write_kitfile(tmp_path, KitFile("t", ()))
+    assert "loop" not in json.loads((tmp_path / ".claude" / "kit.json").read_text())
+
+
+@pytest.mark.parametrize(
+    "loop",
+    [
+        {"base_branch": ""},
+        {"base_branch": "d", "schedule": 1},
+        {"base_branch": "d", "interval_hours": 0},
+        {"base_branch": "d", "interval_hours": 25},
+        {"base_branch": "d", "read_first": "x"},
+    ],
+)
+def test_bad_loop_section_is_a_kit_error(tmp_path, loop):
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude/kit.json").write_text(json.dumps({"test_command": "t", "applies": [], "loop": loop}))
+    with pytest.raises(KitError, match="invalid kit.json"):
         read_kitfile(tmp_path)
