@@ -54,3 +54,11 @@ def test_friction_counts_per_session_across_agents() -> None:
 
 def test_not_measured_names_permission_prompts() -> None:
     assert any(x.startswith("permission prompts") for x in NOT_MEASURED)
+
+
+def test_duration_mixing_aware_and_naive_times_does_not_crash() -> None:
+    assert measure("S1", [session(start="2026-10-17T07:00:00Z", end="2026-10-17T07:30:00")]) == 30.0
+
+
+def test_duration_skips_a_session_with_one_unparseable_time() -> None:
+    assert math.isnan(measure("S1", [session(start="2026-10-17T07:00:00Z", end="garbage")]))

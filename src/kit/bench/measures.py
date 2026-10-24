@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 import statistics
-from datetime import datetime
 
 from kit.bench.benchmarks import Benchmark, is_implementer, is_reviewer, task_count
 from kit.bench.transcripts import Session, Subagent, Transcript
+from kit.bench.windows import parse_utc
 
 FINDING = re.compile(r"^\s*\d+\.\s", re.M)
 RE_REVIEW = re.compile(r"re-?review", re.I)
@@ -43,11 +43,8 @@ def executed(sessions: list[Session]) -> list[Session]:
 
 
 def minutes(session: Session) -> float | None:
-    try:
-        span = datetime.fromisoformat(session.main.end) - datetime.fromisoformat(session.main.start)
-    except ValueError:
-        return None
-    return span.total_seconds() / 60
+    start, end = parse_utc(session.main.start), parse_utc(session.main.end)
+    return None if start is None or end is None else (end - start).total_seconds() / 60
 
 
 def m_permission_denials(sessions: list[Session]) -> float:

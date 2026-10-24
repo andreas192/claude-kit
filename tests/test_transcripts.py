@@ -126,3 +126,51 @@ def test_load_sessions_threads_the_test_command(tmp_path: Path) -> None:
     (tmp_path / "s1.jsonl").write_text("\n".join(lines))
     assert load_sessions(tmp_path, "pytest")[0].main.failed_test_runs == 1
     assert load_sessions(tmp_path)[0].main.failed_test_runs == 0
+
+
+def raw(**record: object) -> str:
+    return json.dumps(record)
+
+
+def test_non_dict_json_lines_are_skipped() -> None:
+    t = parse_transcript(['"x"', "3", "[1]", "null", assistant("a")])
+    assert len(t.calls) == 1
+
+
+def test_non_dict_user_content_blocks_are_skipped() -> None:
+    t = parse_transcript([assistant("a"), user(["str", 3, None, {"type": "text", "text": "go"}])])
+    assert t.prompts == 1
+
+
+def test_odd_assistant_blocks_do_not_crash() -> None:
+    odd = [
+        "str",
+        None,
+        {"type": "tool_use", "name": "Bash"},  # no id
+        {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": None}},
+        {"type": "tool_use", "id": "t2", "name": "Bash", "input": None},
+        {"type": "text"},  # no text
+    ]
+    message = {"id": "a", "model": "claude-opus-5-5", "usage": {"output_tokens": 1}, "content": odd}
+    t = parse_transcript([raw(type="assistant", message=message)], test_command="pytest")
+    assert len(t.calls) == 1
+
+
+def test_unreadable_meta_json_is_treated_as_empty(tmp_path: Path) -> None:
+    (tmp_path / "abc.jsonl").write_text(assistant("a") + "\n")
+    agents = tmp_path / "abc" / "subagents"
+    agents.mkdir(parents=True)
+    (agents / "agent-1.jsonl").write_text(assistant("b") + "\n")
+    (agents / "agent-1.meta.json").write_text("{not json")
+    [s] = load_sessions(tmp_path)
+    assert (s.subagents[0].agent_type, s.subagents[0].description) == ("", "")
+
+
+def test_meta_json_that_is_not_an_object_is_treated_as_empty(tmp_path: Path) -> None:
+    (tmp_path / "abc.jsonl").write_text(assistant("a") + "\n")
+    agents = tmp_path / "abc" / "subagents"
+    agents.mkdir(parents=True)
+    (agents / "agent-1.jsonl").write_text(assistant("b") + "\n")
+    (agents / "agent-1.meta.json").write_text("[1]")
+    [s] = load_sessions(tmp_path)
+    assert s.subagents[0].agent_type == ""

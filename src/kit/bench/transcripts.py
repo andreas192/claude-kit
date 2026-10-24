@@ -94,6 +94,11 @@ def result_chars(content: object) -> int:
     return len(result_text(content))
 
 
+def dict_blocks(content: object) -> list[dict]:
+    """The dict blocks of a message's content; anything else (strings, numbers, null) is skipped."""
+    return [b for b in content if isinstance(b, dict)] if isinstance(content, list) else []
+
+
 def count_tool_result(block: dict, transcript: Transcript, test_ids: Collection[str]) -> None:
     text = result_text(block.get("content"))
     transcript.big_results += len(text) > BIG_RESULT_CHARS
@@ -109,7 +114,7 @@ def count_user_record(record: dict, transcript: Transcript, test_ids: Collection
     if isinstance(content, str):
         transcript.prompts += not record.get("isMeta")
         return
-    for block in content or []:
+    for block in dict_blocks(content):
         if block.get("type") == "tool_result":
             count_tool_result(block, transcript, test_ids)
         elif block.get("type") == "text":
@@ -125,21 +130,25 @@ def count_attachment(record: dict, transcript: Transcript) -> None:
     transcript.context_warnings += any(isinstance(t, str) and t.startswith(CONTEXT_WARN) for t in texts)
 
 
+def tool_command(block: dict) -> str:
+    return (block.get("input") or {}).get("command") or ""
+
+
 def test_command_ids(blocks: list, test_command: str) -> set[str]:
     """Ids of the Bash tool_use blocks whose command contains the repo's test command."""
     return {
         b["id"]
-        for b in blocks
-        if test_command and b.get("type") == "tool_use" and b.get("name") == "Bash" and test_command in b.get("input", {}).get("command", "")
+        for b in dict_blocks(blocks)
+        if test_command and b.get("id") and b.get("type") == "tool_use" and b.get("name") == "Bash" and test_command in tool_command(b)
     }
 
 
 def note_assistant_message(message: dict, transcript: Transcript, state: dict) -> None:
     """Track the text blocks of the latest message id (streamed records of one message share an id)."""
-    blocks = [b for b in message.get("content") or [] if isinstance(b, dict)]
+    blocks = dict_blocks(message.get("content"))
     if message.get("id") != state.get("id"):
         state["id"], state["texts"] = message.get("id"), []
-    state["texts"] += [b["text"] for b in blocks if b.get("type") == "text" and b["text"] not in state["texts"]]
+    state["texts"] += [t for b in blocks if b.get("type") == "text" and (t := b.get("text", "")) not in state["texts"]]
     transcript.last_text = "\n".join(state["texts"])
 
 
@@ -160,9 +169,11 @@ def usage_call(message: dict) -> Call | None:
 def json_records(lines: Iterable[str]) -> Iterator[dict]:
     for line in lines:
         try:
-            yield json.loads(line)
+            record = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if isinstance(record, dict):
+            yield record
 
 
 def parse_transcript(lines: Iterable[str], test_command: str = "") -> Transcript:
@@ -192,9 +203,18 @@ def read_transcript(path: Path, test_command: str = "") -> Transcript:
         return parse_transcript(handle, test_command)
 
 
+def read_meta(path: Path) -> dict:
+    """A subagent's `.meta.json`; missing, unreadable or not an object -> {}."""
+    try:
+        meta = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
 def read_subagent(path: Path, test_command: str = "") -> Subagent:
     meta_path = path.with_name(path.name.removesuffix(".jsonl") + ".meta.json")
-    meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
+    meta = read_meta(meta_path)
     return Subagent(meta.get("agentType", ""), meta.get("description", ""), read_transcript(path, test_command))
 
 
