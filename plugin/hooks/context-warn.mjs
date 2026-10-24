@@ -7,9 +7,10 @@
 // Read-only on the transcript; the only state is a small file per session and
 // event in the OS temp dir.
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const DEFAULT_STEP = 80000;
 const STEP = Number(process.env.KIT_CONTEXT_WARN_STEP ?? DEFAULT_STEP);
@@ -75,4 +76,5 @@ function main() {
   process.stdout.write(JSON.stringify(out));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+// Node resolves symlinks in import.meta.url, so resolve argv[1] the same way.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) main();

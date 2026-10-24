@@ -80,3 +80,14 @@ def test_names_the_strategy_doc_only_if_the_repo_has_it(tmp_path: Path) -> None:
 def test_state_file_has_no_dgi_prefix(tmp_path: Path) -> None:
     run(tmp_path, [assistant(100_000)])
     assert [p.name for p in tmp_path.glob("kit-context-warn-*")] and not list(tmp_path.glob("dgi-*"))
+
+
+def test_runs_through_a_symlinked_path(tmp_path: Path) -> None:
+    link = tmp_path / "linked-hook.mjs"
+    link.symlink_to(HOOK)
+    transcript = tmp_path / "t.jsonl"
+    transcript.write_text(assistant(100_000) + "\n")
+    payload = {"hook_event_name": "Stop", "transcript_path": str(transcript), "session_id": f"{tmp_path.name}-link"}
+    env = {"PATH": shutil.which("node").rsplit("/", 1)[0], "TMPDIR": str(tmp_path), "CLAUDE_PROJECT_DIR": str(tmp_path)}
+    done = subprocess.run(["node", str(link)], input=json.dumps(payload), capture_output=True, text=True, check=True, env=env)
+    assert "100k" in json.loads(done.stdout)["systemMessage"]

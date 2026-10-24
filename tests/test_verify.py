@@ -74,7 +74,6 @@ def test_guard_does_not_create_probe_files(tmp_path: Path) -> None:
 def test_context_warn_passes_on_a_small_transcript(tmp_path: Path) -> None:
     check = check_context_warn(PLUGIN, tmp_path, run_input)
     assert check.passed, check.detail
-    assert [p.name for p in tmp_path.glob("kit-context-warn-*")] == []
 
 
 @needs_node
@@ -84,6 +83,15 @@ def test_context_warn_fails_when_the_hook_cannot_run(tmp_path: Path) -> None:
     (broken / "hooks" / "context-warn.mjs").write_text("process.exit(2)\n")
     check = check_context_warn(broken, tmp_path / "state", run_input)
     assert not check.passed and "exited 2" in check.detail
+
+
+@needs_node
+def test_context_warn_fails_when_the_hook_stays_silent_above_the_step(tmp_path: Path) -> None:
+    silent = tmp_path / "plugin"
+    (silent / "hooks").mkdir(parents=True)
+    (silent / "hooks" / "context-warn.mjs").write_text("process.exit(0)\n")
+    check = check_context_warn(silent, tmp_path / "state", run_input)
+    assert not check.passed and "did not warn" in check.detail
 
 
 def copy_plugin(tmp_path: Path) -> Path:

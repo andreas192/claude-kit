@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,20 +59,34 @@ def check_guard(plugin: Path, repo: Path, layers: dict, run_input: RunInput) -> 
     return Check("guard", True, "wiring imports denied in unit tests; pipeline test gets its contract")
 
 
-def check_context_warn(plugin: Path, tmp: Path, run_input: RunInput) -> Check:
-    tmp.mkdir(parents=True, exist_ok=True)
-    transcript = tmp / "transcript.jsonl"
-    usage = {"input_tokens": 1, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 1000}
+def _context_transcript(tmp: Path, name: str, context: int) -> Path:
+    usage = {"input_tokens": 1, "cache_creation_input_tokens": 0, "cache_read_input_tokens": context}
     record = {"type": "assistant", "isSidechain": False, "message": {"model": "claude-sonnet-5-5", "usage": usage}}
-    transcript.write_text(json.dumps(record) + "\n")
-    payload = {"hook_event_name": "Stop", "transcript_path": str(transcript), "session_id": "kit-verify"}
+    path = tmp / name
+    path.write_text(json.dumps(record) + "\n")
+    return path
+
+
+def _context_warn_run(plugin: Path, tmp: Path, run_input: RunInput, transcript: Path, session: str) -> subprocess.CompletedProcess[str]:
+    payload = {"hook_event_name": "Stop", "transcript_path": str(transcript), "session_id": session}
     env = {"TMPDIR": str(tmp), "KIT_CONTEXT_WARN_STEP": CONTEXT_WARN_STEP, "CLAUDE_PROJECT_DIR": str(tmp)}
-    done = run_input(["node", str(plugin / "hooks" / "context-warn.mjs")], tmp, json.dumps(payload), env)
-    if done.returncode != 0:
-        return Check("context-warn", False, f"context-warn exited {done.returncode}: {done.stderr.strip()}")
-    if done.stdout.strip():
+    return run_input(["node", str(plugin / "hooks" / "context-warn.mjs")], tmp, json.dumps(payload), env)
+
+
+def check_context_warn(plugin: Path, tmp: Path, run_input: RunInput) -> Check:
+    """Two probes: silent below the step, and a `systemMessage` above it (a hook that dies silently fails the second)."""
+    tmp.mkdir(parents=True, exist_ok=True)
+    probes = (("kit-verify-below", 1000), ("kit-verify-above", int(CONTEXT_WARN_STEP) + 1000))
+    runs = [_context_warn_run(plugin, tmp, run_input, _context_transcript(tmp, f"{s}.jsonl", c), s) for s, c in probes]
+    below, above = runs
+    for done in runs:
+        if done.returncode != 0:
+            return Check("context-warn", False, f"context-warn exited {done.returncode}: {done.stderr.strip()}")
+    if below.stdout.strip():
         return Check("context-warn", False, "context-warn warned on a transcript under the step")
-    return Check("context-warn", True, "silent below the step")
+    if "systemMessage" not in above.stdout:
+        return Check("context-warn", False, "context-warn did not warn on a transcript above the step")
+    return Check("context-warn", True, "silent below the step, warns above it")
 
 
 def check_agents(plugin: Path) -> Check:
