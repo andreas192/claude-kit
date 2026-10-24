@@ -221,6 +221,30 @@ def test_resume_refuses_while_the_loop_is_running(tmp_path):
         held.close()
 
 
+def test_resume_refuses_a_branch_checked_out_in_another_worktree(tmp_path):
+    _, repo = init_origin(tmp_path)
+    loop_branch(repo, "row-a", ANSWERED_SPEC, "parked")
+    git(repo, "checkout", "loop/row-a")
+    env = env_for(tmp_path, repo)
+    with pytest.raises(KitError, match=f"loop/row-a is checked out in {repo.resolve()}"):
+        resume(env, "row-a")
+
+
+def test_resume_of_a_branch_checked_out_in_the_loop_worktree_is_not_refused(tmp_path):
+    _, repo = init_origin(tmp_path)
+    loop_branch(repo, "row-a", ANSWERED_SPEC, "parked")
+    env = env_for(tmp_path, repo)
+    git(env.worktree, "checkout", "loop/row-a")
+    resume(env, "row-a")
+
+
+def test_resume_of_a_key_with_no_branch_on_origin_is_a_kit_error(tmp_path):
+    _, repo = init_origin(tmp_path)
+    env = env_for(tmp_path, repo)
+    with pytest.raises(KitError, match="no branch loop/typo on origin"):
+        resume(env, "typo")
+
+
 def test_resume_writes_stage_spec_commits_and_pushes(tmp_path):
     origin, repo = init_origin(tmp_path)
     loop_branch(repo, "row-a", ANSWERED_SPEC, "parked")

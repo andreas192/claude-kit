@@ -56,6 +56,14 @@ def test_none_note_lists_owner_items_and_parked_drafts(roadmap):
     assert "## Blocked" not in note
 
 
+def test_none_note_lists_only_open_drafts_and_names_a_missing_reason_parked(roadmap):
+    closed = Pr(8, "loop/y", "CLOSED", "2026-10-21", "https://x/pull/8", is_draft=True, body=park_body("old", "", "", []))
+    bare = Pr(9, "loop/x", "OPEN", "2026-10-21", "https://x/pull/9", is_draft=True, body="hand-made draft")
+    note = none_note(roadmap, [closed, bare])
+    assert "pull/8" not in note
+    assert "- https://x/pull/9: parked" in note
+
+
 def test_none_note_leaves_out_empty_sections_and_ignores_non_draft_prs():
     r = parse_roadmap("### A\n- Status: blocked\n- Blocked by: a thing\n")
     merged = Pr(1, "loop/a", "MERGED", "2026-10-21", "u")

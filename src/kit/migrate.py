@@ -85,8 +85,8 @@ def roadmap_files(repo: Path, run: Runner) -> list[str]:
     return sorted(old - {NEW_ROADMAP})
 
 
-def loop_notes(had_loop: bool, agents: list[Path], has_loop_section: bool) -> list[str]:
+def loop_notes(had_loop: bool, agents: list[Path], has_loop_section: bool, repo: Path) -> list[str]:
     unload = [f"before merging, run scripts/feature_loop.sh uninstall in the repo (loaded: {agent.name})" for agent in agents]
-    install = ["after merging, run kit loop install <repo>"] if had_loop else []
+    install = [f"after merging, run kit loop install {repo}"] if had_loop else []
     section = ["add a loop section to .claude/kit.json (see the spec)"] if had_loop and not has_loop_section else []
     return [*unload, *install, *section]

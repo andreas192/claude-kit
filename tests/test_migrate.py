@@ -159,17 +159,17 @@ def test_roadmap_files_is_empty_without_any(git_repo):
 
 def test_loop_notes_come_in_the_stated_order():
     agents = [Path("/a/com.old.one.plist"), Path("/a/com.old.two.plist")]
-    assert loop_notes(True, agents, False) == [
+    assert loop_notes(True, agents, False, Path("/r/app")) == [
         "before merging, run scripts/feature_loop.sh uninstall in the repo (loaded: com.old.one.plist)",
         "before merging, run scripts/feature_loop.sh uninstall in the repo (loaded: com.old.two.plist)",
-        "after merging, run kit loop install <repo>",
+        "after merging, run kit loop install /r/app",
         "add a loop section to .claude/kit.json (see the spec)",
     ]
 
 
 def test_loop_notes_are_empty_for_a_repo_without_a_loop():
-    assert loop_notes(False, [], False) == []
+    assert loop_notes(False, [], False, Path("/r/app")) == []
 
 
 def test_loop_notes_skip_the_section_hint_when_the_section_exists():
-    assert loop_notes(True, [], True) == ["after merging, run kit loop install <repo>"]
+    assert loop_notes(True, [], True, Path("/r/app")) == ["after merging, run kit loop install /r/app"]

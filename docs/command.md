@@ -50,7 +50,7 @@ The scheduled agent runs on weekdays only, from the applied version's snapshot (
 
 A spec question the loop cannot answer parks the item as a draft PR; `resume` leads to a PR that `gh pr ready` moves out of draft. The PR body and the spec on the loop branch list the questions under `## Questions for the owner`.
 
-1. Check out `loop/<key>` and answer each question in the spec, so that `## Questions for the owner` is empty. Commit and push the branch.
+1. Answer each question in the spec on `loop/<key>`, so that `## Questions for the owner` is empty. Do it in a separate worktree (`git worktree add ../<key> loop/<key>`), commit and push, then remove it (`git worktree remove ../<key>`). If you used your main checkout, switch it off `loop/<key>` first: `kit loop resume` refuses while any other worktree has the branch checked out.
 2. Run `uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key>`. It sets the branch's status back to stage `spec`, commits and pushes. The next weekday run finishes the spec and carries on.
 
 `kit loop resume` refuses while a run holds the lock.

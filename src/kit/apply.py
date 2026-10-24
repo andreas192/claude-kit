@@ -86,7 +86,7 @@ def apply(
     gitops.commit_all(repo, f"chore: record claude-kit {version}", run)
 
     had_loop = OLD_LOOP_SCRIPT in (*migration.remove, *migration.overrides)
-    notes = loop_notes(had_loop, other_loop_agents(agents_dir, repo, loop_label(repo.name)), kit.loop is not None)
+    notes = loop_notes(had_loop, other_loop_agents(agents_dir, repo, loop_label(repo.name)), kit.loop is not None, repo)
     prose = prose_outside(prose_mentions(repo, run), added)
     body = gitops.pr_body(version, migration, removed_hooks, added, prose, checks, roadmap_files(repo, run), notes)
     url = gitops.open_pr(repo, branch, f"chore: apply claude-kit {version}", body, run) if open_pr else None

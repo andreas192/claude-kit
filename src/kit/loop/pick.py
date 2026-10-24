@@ -60,7 +60,7 @@ def none_note(roadmap: Roadmap, prs: list[Pr]) -> str:
     def waiting(status: str) -> list[str]:
         return [f"- {i.title}: {i.blocked_by}" for i in roadmap.items if i.status == status]
 
-    parked = [f"- {p.url}: {parse_park_body(p.body).reason}" for p in prs if p.is_draft]
+    parked = [f"- {p.url}: {parse_park_body(p.body).reason or 'parked'}" for p in prs if p.is_draft and p.state == "OPEN"]
     sections = [
         _section("Waiting on the owner", waiting("owner")),
         _section("Blocked", waiting("blocked")),

@@ -209,10 +209,36 @@ def resume(env: driver.Env, key: str) -> None:
         lock.close()
 
 
+def _require_remote_branch(env: driver.Env, branch: str) -> None:
+    try:
+        env.sh(["git", "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{branch}"])
+    except subprocess.CalledProcessError as error:
+        raise KitError(f"no branch {branch} on origin") from error
+
+
+def checked_out_elsewhere(porcelain: str, branch: str, worktree: Path) -> Path | None:
+    """The first worktree other than `worktree` that has `branch` checked out, from `git worktree list --porcelain`."""
+    for block in porcelain.strip().split("\n\n"):
+        fields = dict(line.split(" ", 1) for line in block.splitlines() if " " in line)
+        path = Path(fields.get("worktree", ""))
+        if fields.get("branch") == f"refs/heads/{branch}" and path.resolve() != worktree.resolve():
+            return path
+    return None
+
+
+def _require_free_branch(env: driver.Env, branch: str) -> None:
+    other = checked_out_elsewhere(env.sh(["git", "worktree", "list", "--porcelain"]), branch, env.worktree)
+    if other is not None:
+        raise KitError(f"{branch} is checked out in {other}; switch that checkout off it (or answer in a separate worktree) first")
+
+
 def _resume_locked(env: driver.Env, branch: str) -> None:
     env.sh(["git", "fetch", "origin", "--prune"])
+    _require_remote_branch(env, branch)
+    _require_free_branch(env, branch)
     env.sh(["git", "reset", "--hard"])
     env.sh(["git", "clean", "-fd"])
+    # Resets to origin and drops unpushed local commits; safe, because a parked branch is always pushed.
     env.sh(["git", "checkout", "-B", branch, f"origin/{branch}"])
     status_path = env.worktree / ".loop" / "status.json"
     status = read_status(status_path)

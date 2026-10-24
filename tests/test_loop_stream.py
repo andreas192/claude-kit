@@ -35,6 +35,7 @@ def test_parse_no_loop_line_is_error():
 
 def test_parse_pick_is_no_longer_a_loop_word():
     assert parse_stream([result("LOOP: pick Row A")]).outcome == "error"
+    assert parse_stream([result("LOOP: none")]).outcome == "error"  # no stage reports "none"
 
 
 def test_parse_rejected_is_usage():

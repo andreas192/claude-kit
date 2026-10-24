@@ -11,7 +11,7 @@ from pathlib import Path
 LIMIT = 0.8
 DETAIL_MAX = 500
 RESULT_MAX = 600
-_LOOP = re.compile(r"^LOOP: (ok|more|park|none)\b\s*(.*)$")
+_LOOP = re.compile(r"^LOOP: (ok|more|park)\b\s*(.*)$")
 
 STAGE_MODELS = {
     "probe": ("haiku", None),
