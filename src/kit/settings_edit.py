@@ -17,7 +17,7 @@ def read_settings(repo: Path) -> dict:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         raise KitError(f"{path} is not valid JSON: {error}") from error
 
@@ -25,7 +25,7 @@ def read_settings(repo: Path) -> dict:
 def write_settings(repo: Path, settings: dict) -> None:
     path = repo / SETTINGS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(settings, indent=2) + "\n")
+    path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def with_kit(settings: dict, version: str, snapshot_path: Path) -> dict:

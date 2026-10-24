@@ -89,3 +89,8 @@ def test_write_then_read_round_trips_with_indent_and_newline(tmp_path):
     text = (tmp_path / ".claude/settings.json").read_text()
     assert text.endswith("}\n") and text.startswith('{\n  "enabledPlugins"')
     assert read_settings(tmp_path) == DGI_SETTINGS
+
+
+def test_write_keeps_non_ascii_text_readable(tmp_path):
+    write_settings(tmp_path, {"note": "café — ñ"})
+    assert "café — ñ" in (tmp_path / ".claude/settings.json").read_text(encoding="utf-8")

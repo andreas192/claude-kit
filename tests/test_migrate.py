@@ -56,6 +56,25 @@ def test_prose_mentions_skip_kit_bench_lines(git_repo):
     assert prose_mentions(git_repo, run) == ["docs/a.md:1"]
 
 
+def test_prose_mentions_skip_binary_files(git_repo):
+    commit(git_repo, {"docs/a.md": "see token_report\n"}, "c", "2026-10-01T10:00:00Z")
+    (git_repo / "blob.bin").write_bytes(b"token_report\x00\x01")
+    git(git_repo, "add", "blob.bin")
+    git(git_repo, "commit", "-m", "binary")
+    assert prose_mentions(git_repo, run) == ["docs/a.md:1"]
+
+
+def test_prose_mentions_ignore_lines_that_are_not_path_number_text(tmp_path):
+    out = "Binary file blob.bin matches\ndocs/a.md:2:see token_report\nweird:line\n"
+    assert prose_mentions(tmp_path, lambda cmd, cwd: out) == ["docs/a.md:2"]
+
+
+def test_prose_mentions_skip_the_kit_own_specs_and_plans(git_repo):
+    files = {"docs/superpowers/plans/p.md": "token_report\n", "docs/superpowers/specs/s.md": "token_report\n", "docs/b.md": "token_report\n"}
+    commit(git_repo, files, "c", "2026-10-01T10:00:00Z")
+    assert prose_mentions(git_repo, run) == ["docs/b.md:1"]
+
+
 def test_prose_mentions_none_is_an_empty_list(git_repo):
     commit(git_repo, {"README.md": "nothing here\n"}, "c", "2026-10-01T10:00:00Z")
     assert prose_mentions(git_repo, run) == []

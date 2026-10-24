@@ -24,7 +24,10 @@ KNOWN_HASHES = Path(__file__).parent / "known_hashes.json"
 PROSE_PATTERN = "implementer-haiku|implementer-sonnet|reviewer-sonnet|test-layer-guard|context-warn|token_report"
 ON_THE_KIT = ("kit:", "kit bench")
 # git grep exits 1 when nothing matches; any other non-zero status is a real failure and still raises.
-GREP_SCRIPT = 'git grep -n -E "$1" -- . ":(exclude).claude"; status=$?; [ "$status" -le 1 ] || exit "$status"'
+# -I skips binary files; docs/superpowers holds specs and plans, which name these files as history, not as live prose.
+GREP_SCRIPT = (
+    'git grep -n -I -E "$1" -- . ":(exclude).claude" ":(exclude)docs/superpowers"; status=$?; [ "$status" -le 1 ] || exit "$status"'
+)
 
 
 @dataclass(frozen=True)
@@ -54,7 +57,7 @@ def apply_migration(repo: Path, migration: Migration) -> None:
 
 def prose_mentions(repo: Path, run: Runner) -> list[str]:
     out = run(["sh", "-c", GREP_SCRIPT, "sh", PROSE_PATTERN], repo)
-    hits = (line.split(":", 2) for line in out.splitlines())
+    hits = [parts for line in out.splitlines() if len(parts := line.split(":", 2)) == 3]
     return [f"{path}:{number}" for path, number, text in hits if not any(mark in text for mark in ON_THE_KIT)]
 
 
