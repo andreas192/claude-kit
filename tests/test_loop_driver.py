@@ -530,6 +530,27 @@ def test_resume_resets_to_origin_when_local_is_not_ahead(tmp_path):
     assert f.lines()[-1] == "git checkout -B loop/a origin/loop/a"
 
 
+def test_resumes_a_live_branch_whose_pr_was_merged_by_hand(tmp_path):
+    merged = Pr(1, "loop/a", "MERGED", "2026-10-17T01", "u1")
+    scripted = scripts(build=[step()], pr=[step(opens=True)])
+    f = FakeEnv(tmp_path, scripted, prs=[merged], branches=["loop/a"], roadmap=ROADMAP_A_ACTIVE)
+    f.tips["loop/a"] = json.dumps({"stage": "build"})
+    resume_status(f)
+    assert run(f.env()) == "done"
+    assert f.stages == ["probe", "build", "pr"]
+    assert "git show origin/loop/a:.loop/status.json" in f.lines()
+    assert "git show origin/develop:docs/roadmap.md" in f.lines()  # the run went on to the code pick
+
+
+def test_pr_ok_needs_an_open_pr_not_an_old_merged_one(tmp_path):
+    merged = Pr(1, "loop/a", "MERGED", "2026-10-17T01", "u1")
+    scripted = scripts(pr=[step(commit=False), step(commit=False)])
+    f = FakeEnv(tmp_path, scripted, prs=[merged], branches=["loop/a"], roadmap=ROADMAP_A_ACTIVE)
+    f.tips["loop/a"] = json.dumps({"stage": "pr"})
+    resume_status(f, "pr")
+    assert run(f.env()) == "env" and any("no PR exists" in m for m in f.logs)
+
+
 def test_probe_error_is_an_env_failure_with_detail_and_one_notice(tmp_path):
     f = FakeEnv(tmp_path, {"probe": [step(raw=[result("claude exited 1: bad flag", True)], commit=False)]})
     assert run(f.env()) == "env"
