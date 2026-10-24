@@ -3,6 +3,7 @@
 import hashlib
 import json
 import subprocess
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +30,9 @@ ROADMAP_A_ACTIVE = "### Row A\n- Status: active\n"
 ROADMAP_OWNER = "### Row B\n- Status: owner\n- Blocked by: needs owner\n"
 GOOD_SPEC = "# Spec\n\n## Calls made for the owner\n\n- Chose X. Rejected: Y.\n"
 FRIDAY = datetime(2026, 10, 23, 10)
+FRIDAY_LATE = datetime(2026, 10, 23, 23)
+SATURDAY_EARLY = datetime(2026, 10, 24, 0, 5)
+SUNDAY = datetime(2026, 10, 25, 10)
 
 
 def rate(five: float, seven: float = 0.1, status: str = "allowed") -> str:
@@ -63,13 +67,17 @@ class FakeEnv:
         roadmap: str = ROADMAP_A_OPEN,
         spec_text: str | None = GOOD_SPEC,
         config: LoopConfig | None = None,
-        now: datetime = FRIDAY,
+        now: Callable[[], datetime] | None = None,
+        saturday_after: str | None = None,
+        weekend_ok: bool = False,
     ):
         self.worktree = tmp_path / "wt"
         self.runtime = tmp_path / "runtime"
         self.worktree.mkdir(parents=True, exist_ok=True)
         self.today = "2026-10-17"
-        self.now = now
+        self.now_fn = now
+        self.saturday_after = saturday_after
+        self.weekend_ok = weekend_ok
         self.config = config or LoopConfig("develop")
         self.roadmap = roadmap
         self.scripts = {k: list(v) for k, v in scripts.items()}
@@ -111,6 +119,13 @@ class FakeEnv:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(self.spec_text)
         return s["lines"]
+
+    def clock(self) -> datetime:
+        if self.now_fn:
+            return self.now_fn()
+        if self.saturday_after:
+            return SATURDAY_EARLY if self.saturday_after in self.stages else FRIDAY_LATE
+        return FRIDAY
 
     def blob(self) -> str:
         return hashlib.sha1(self.roadmap.encode()).hexdigest()
@@ -184,7 +199,8 @@ class FakeEnv:
             worktree=self.worktree,
             runtime=self.runtime,
             today=self.today,
-            now=lambda: self.now,
+            now=self.clock,
+            weekend_ok=self.weekend_ok,
             config=self.config,
             test_command="uv run pytest -q",
             repo_name="demo",
@@ -203,7 +219,8 @@ class FakeEnv:
 def env_with(config: LoopConfig, runtime: Path = Path("/runtime")) -> Env:
     """An Env for rendering prompts: nothing in it touches the disk."""
     fake = FakeEnv.__new__(FakeEnv)
-    fake.runtime, fake.worktree, fake.today, fake.now, fake.config = runtime, Path("/wt"), "2026-10-17", FRIDAY, config
+    fake.runtime, fake.worktree, fake.today, fake.config = runtime, Path("/wt"), "2026-10-17", config
+    fake.now_fn, fake.saturday_after, fake.weekend_ok = None, None, False
     fake.notices, fake.logs = [], []
     return fake.env()
 
@@ -221,13 +238,26 @@ def run_fake(
     resume_branch: str | None = None,
     open_prs=(),
     stage: str = "build",
+    now: Callable[[], datetime] | None = None,
+    saturday_after: str | None = None,
+    weekend_ok: bool = False,
     **stages,
 ):
     """Run the loop; resume_branch starts it on a live branch at `stage`, holding the open_prs given as gh rows."""
     if resume_branch:
         roadmap, branches = ROADMAP_A_ACTIVE, [*branches, resume_branch]
         stages = {"pr": [step(commit=False), step(commit=False)], **stages}
-    f = FakeEnv(tmp_path, scripts(**stages), prs=prs, branches=branches, roadmap=roadmap, spec_text=spec_text)
+    f = FakeEnv(
+        tmp_path,
+        scripts(**stages),
+        prs=prs,
+        branches=branches,
+        roadmap=roadmap,
+        spec_text=spec_text,
+        now=now,
+        saturday_after=saturday_after,
+        weekend_ok=weekend_ok,
+    )
     if resume_branch:
         f.tips[resume_branch] = json.dumps({"stage": stage})
         resume_status(f, stage)
@@ -734,3 +764,24 @@ def test_pick_only_says_none_and_names_skips(tmp_path, capsys):
 def test_pick_only_reports_an_invalid_roadmap(tmp_path):
     f = FakeEnv(tmp_path, scripts(), roadmap="### A\n- Status: soon\n")
     assert pick_only(f.env()) == "env" and any("roadmap: docs/roadmap.md:1:" in m for m in f.logs)
+
+
+def test_sunday_run_makes_no_claude_call(tmp_path):
+    reason, fake = run_fake(tmp_path, now=lambda: SUNDAY)
+    assert reason == "weekend" and fake.stages == []
+
+
+def test_stage_ending_on_saturday_is_followed_by_none(tmp_path):
+    # FakeEnv.now returns Friday 23:00 until its claude() has run the spec stage, then Saturday 00:05
+    reason, fake = run_fake(tmp_path, saturday_after="spec")
+    assert reason == "weekend" and fake.stages == ["probe", "spec"]
+
+
+def test_weekend_ok_overrides(tmp_path):
+    reason, fake = run_fake(tmp_path, now=lambda: SUNDAY, weekend_ok=True)
+    assert "spec" in fake.stages
+
+
+def test_pick_only_on_sunday_is_weekend_without_reading_the_roadmap(tmp_path):
+    f = FakeEnv(tmp_path, scripts(), now=lambda: SUNDAY)
+    assert pick_only(f.env()) == "weekend" and f.cmds == []

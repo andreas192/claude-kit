@@ -18,6 +18,7 @@ from kit.kitfile import LoopConfig
 from kit.loop.pick import Pick, none_note
 from kit.loop.pick import pick as choose
 from kit.loop.prs import PR_FIELDS, Pr, loop_prs, park_body
+from kit.loop.schedule import may_start
 from kit.loop.state import (
     Status,
     has_calls_section,
@@ -274,6 +275,10 @@ def _read(path: Path) -> str:
     return path.read_text() if path.exists() else ""
 
 
+def _on_weekend(env: Env) -> bool:
+    return not (env.weekend_ok or may_start(env.now()))
+
+
 class _Run:
     def __init__(self, env: Env, usage: Usage) -> None:
         self.env = env
@@ -352,6 +357,8 @@ class _Run:
         while stage not in ("done", "parked"):
             if over_limit(self.usage):
                 return "limit"
+            if _on_weekend(self.env):
+                return "weekend"
             r = self.step(stage, branch, status)
             self.usage = r.usage or self.usage
             if r.outcome == "usage":
@@ -386,6 +393,8 @@ def _probe(env: Env) -> tuple[Usage | None, str]:
 
 
 def run(env: Env) -> str:
+    if _on_weekend(env):
+        return "weekend"
     usage, stop = _probe(env)
     if stop or usage is None:
         return stop or "env"
@@ -411,6 +420,8 @@ def _print_pick(picked: Pick) -> None:
 
 
 def pick_only(env: Env) -> str:
+    if _on_weekend(env):
+        return "weekend"
     prs, branches = _snapshot(env)
     try:
         _, picked = _choose(env, prs, branches)
