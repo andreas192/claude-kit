@@ -56,3 +56,8 @@ def prose_mentions(repo: Path, run: Runner) -> list[str]:
     out = run(["sh", "-c", GREP_SCRIPT, "sh", PROSE_PATTERN], repo)
     hits = (line.split(":", 2) for line in out.splitlines())
     return [f"{path}:{number}" for path, number, text in hits if not any(mark in text for mark in ON_THE_KIT)]
+
+
+def prose_outside(hits: list[str], added: list[str]) -> list[str]:
+    """Drop hits inside files this apply just added: the kit wrote that prose, the owner has nothing to edit."""
+    return [hit for hit in hits if hit.rsplit(":", 1)[0] not in added]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import tomllib
 from collections.abc import Callable
@@ -12,6 +13,7 @@ from pathlib import Path
 from kit.errors import KitError
 
 UNSUPPORTED = "unsupported stack: no language pack for this repo (supported: python-uv)"
+LAYERS_PATH = ".claude/test-layers.json"
 GUARD_PATH = ".claude/hooks/test-layer-guard.mjs"
 PIPELINE_TEST = "tests/test_cli_pipeline.py"
 TEST_COMMAND = "uv run pytest -q"
@@ -24,6 +26,10 @@ FLAGS = {
     "pipeline_test": "--pipeline-test",
     "wiring_functions": "--wiring-functions",
 }
+
+
+REQUIRED = ("test_command", "pipeline_test")
+Ask = Callable[[str, str], str]
 
 
 @dataclass(frozen=True)
@@ -127,7 +133,37 @@ def _apply(d: Detected, key: str, answer: str) -> Detected:
     return replace(d, **{key: value})
 
 
-def resolve(d: Detected, answers: dict[str, str], ask: Callable[[str, str], str] | None) -> Detected:
+def previous_answers(repo: Path, d: Detected) -> dict[str, str]:
+    """On an upgrade the local guard is gone; the wiring functions then come from the last apply's test-layers.json."""
+    if "wiring_functions" not in d.unresolved:
+        return {}
+    try:
+        recorded = json.loads((repo / LAYERS_PATH).read_text())["wiring_functions"]
+        return {"wiring_functions": ",".join(recorded)}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def checked_answer(key: str, value: str) -> str:
+    """An empty test_command or pipeline_test would silently disable the guard or the checks."""
+    if key in REQUIRED and not value.strip():
+        raise KitError(f"{FLAGS[key]} needs a non-empty value")
+    return value
+
+
+def checked_answers(answers: dict[str, str]) -> dict[str, str]:
+    return {key: checked_answer(key, value) for key, value in answers.items()}
+
+
+def checked_ask(ask: Ask | None) -> Ask | None:
+    return None if ask is None else lambda key, proposal: checked_answer(key, ask(key, proposal))
+
+
+def ask_with_default(read: Callable[[str], str]) -> Ask:
+    return lambda key, proposal: read(f"{key} [{proposal}]: ") or proposal
+
+
+def resolve(d: Detected, answers: dict[str, str], ask: Ask | None) -> Detected:
     """Apply flag answers over detection, then ask for what is still unresolved."""
     for key in FLAGS:
         if key in answers:

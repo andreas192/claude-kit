@@ -7,14 +7,19 @@ from pathlib import Path
 
 import pytest
 
+from kit.errors import KitError
 from kit.gitrun import run_input
 from kit.verify import (
+    Check,
     check_agents,
     check_context_warn,
     check_guard,
+    check_line,
     check_settings,
     check_tests,
+    require_passing,
     run_checks,
+    verify,
 )
 
 PLUGIN = Path(__file__).parents[1] / "plugin"
@@ -160,3 +165,38 @@ def test_run_checks_reports_every_check_when_programs_are_missing(tmp_path: Path
     repo = repo_with(tmp_path, LAYERS)
     checks = run_checks(PLUGIN, repo, LAYERS, "true", tmp_path / "state", missing_program)
     assert [c.passed for c in checks] == [True, False, False, True, False]
+
+
+@needs_node
+def test_verify_uses_a_scratch_dir_inside_kit_home_and_removes_it(tmp_path: Path) -> None:
+    repo = repo_with(tmp_path, LAYERS)
+    home = tmp_path / "kit-home"
+    home.mkdir()
+    checks = verify(PLUGIN, repo, LAYERS, "true", home, run_input)
+    assert all(c.passed for c in checks)
+    assert list(home.iterdir()) == []
+
+
+def test_verify_removes_the_scratch_dir_when_every_program_is_missing(tmp_path: Path) -> None:
+    home = tmp_path / "kit-home"
+    home.mkdir()
+    verify(PLUGIN, repo_with(tmp_path, LAYERS), LAYERS, "true", home, missing_program)
+    assert list(home.iterdir()) == []
+
+
+def test_require_passing_is_silent_when_every_check_passed() -> None:
+    require_passing([Check("a", True, "ok")], "chore/claude-kit-v0.1.0")
+
+
+def test_require_passing_lists_failures_and_names_the_branch() -> None:
+    checks = [Check("a", True, "ok"), Check("tests", False, "boom"), Check("guard", False, "bad")]
+    with pytest.raises(KitError) as raised:
+        require_passing(checks, "chore/claude-kit-v0.1.0")
+    message = str(raised.value)
+    assert "tests: boom" in message and "guard: bad" in message and "a: ok" not in message
+    assert "branch chore/claude-kit-v0.1.0 left for inspection; no PR" in message
+
+
+def test_check_line_marks_pass_and_fail() -> None:
+    assert check_line(Check("a", True, "ok")) == "PASS a: ok"
+    assert check_line(Check("a", False, "no")) == "FAIL a: no"

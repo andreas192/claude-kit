@@ -6,7 +6,7 @@ import pytest
 
 from builders import commit, git
 from kit.gitrun import run
-from kit.migrate import CANDIDATES, Migration, apply_migration, load_known, plan_migration, prose_mentions
+from kit.migrate import CANDIDATES, Migration, apply_migration, load_known, plan_migration, prose_mentions, prose_outside
 
 
 def sha(text: str) -> str:
@@ -71,3 +71,8 @@ def test_prose_mentions_real_git_failure_is_not_swallowed(tmp_path):
 def test_packaged_known_hashes_cover_dividend_growth_files():
     known = load_known()
     assert all(known.get(p) for p in CANDIDATES)
+
+
+def test_prose_outside_drops_hits_in_files_this_apply_added():
+    hits = ["CLAUDE.md:3", "docs/token-strategy.md:54", "docs/token-strategy.md.bak:1"]
+    assert prose_outside(hits, ["docs/token-strategy.md"]) == ["CLAUDE.md:3", "docs/token-strategy.md.bak:1"]

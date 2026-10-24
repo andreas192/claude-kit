@@ -34,3 +34,15 @@ def test_write_baseline_writes_json_with_q4_into_the_repo(tmp_path):
     assert path == repo / ".claude" / "kit-bench" / "baseline.json"
     data = json.loads(path.read_text())
     assert data["Q4"] == 0.5 and data["Q1"] is None and list(data)[:2] == ["B1", "B2"]
+
+
+def test_write_baseline_reads_transcripts_with_the_given_test_command(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr("kit.bench.run.repo_sessions", lambda repo, root, test_command: seen.append(test_command) or [])
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-b", "main")
+    commit(repo, {"a.py": "1"}, "feat a", "2026-10-01T10:00:00Z")
+    write_baseline(repo, tmp_path, run)
+    write_baseline(repo, tmp_path, run, "uv run pytest -q")
+    assert seen == ["", "uv run pytest -q"]

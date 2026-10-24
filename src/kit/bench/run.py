@@ -53,10 +53,11 @@ def repo_columns(repo: Path, windows: list[Window], root: Path, since: str, run:
     return [Column(w.name, grouped[w.name], fix_share(w, ms, flags)) for w in windows]
 
 
-def write_baseline(repo: Path, root: Path, run: Runner) -> Path:
-    kit = read_kitfile(repo) or KitFile("", ())
+def write_baseline(repo: Path, root: Path, run: Runner, test_command: str | None = None) -> Path:
+    """`test_command` None reads it from kit.json; apply passes the resolved one, as kit.json does not exist yet."""
+    command = (read_kitfile(repo) or KitFile("", ())).test_command if test_command is None else test_command
     ms = history(repo, run)
-    values = {**baseline_values(repo_sessions(repo, root, kit.test_command)), "Q4": nan_to_none(fix_share(EVERYTHING, ms, followed_by_fix(ms)))}
+    values = {**baseline_values(repo_sessions(repo, root, command)), "Q4": nan_to_none(fix_share(EVERYTHING, ms, followed_by_fix(ms)))}
     path = repo / BENCH_DIR / BASELINE
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(values, indent=2) + "\n")

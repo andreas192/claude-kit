@@ -1,12 +1,18 @@
 """PIPELINE: the kit CLI end to end over temp git repos and a temp transcript root."""
 
+import hashlib
+import json
+import shutil
+import subprocess
 from datetime import date
 from pathlib import Path
 
 import pytest
-from builders import assistant, commit, git, rec
+from builders import assistant, commit, git, rec, tag
+from test_detect import DGI_WIRING, build_repo
 
 from kit.bench.transcripts import transcript_dir_name
+from kit import cli
 from kit.cli import main
 from kit.kitfile import Apply, KitFile, write_kitfile
 
@@ -124,3 +130,103 @@ def test_status_survives_a_corrupt_sibling(tmp_path, capsys):
     (tmp_path / "bad" / ".claude" / "kit.json").write_text("{oops")
     assert main(["status", "--base", str(tmp_path)]) == 0
     assert capsys.readouterr().out.strip() == "bad  invalid kit.json"
+
+
+KIT_SOURCE = Path(__file__).parents[1]
+needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
+LOCAL_HOOKS = (".claude/hooks/test-layer-guard.mjs", ".claude/hooks/context-warn.mjs")
+BRANCH = "chore/claude-kit-v0.1.0"
+
+
+def hook_entry(script: str) -> dict:
+    return {"hooks": [{"type": "command", "command": f"node .claude/hooks/{script}"}]}
+
+
+@pytest.fixture
+def kit_repo(tmp_path: Path, monkeypatch) -> Path:
+    repo = tmp_path / "kit-repo"
+    for folder in ("plugin", "starter"):
+        shutil.copytree(KIT_SOURCE / folder, repo / folder)
+    git(repo, "init", "-b", "main")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "release")
+    tag(repo, "v0.1.0")
+    monkeypatch.setattr(cli, "KIT_REPO", repo)
+    return repo
+
+
+@pytest.fixture
+def target(tmp_path: Path) -> Path:
+    (tmp_path / "target").mkdir()
+    repo = build_repo(tmp_path / "target", "dgi", DGI_WIRING, "run_refresh")
+    (repo / ".claude/hooks/context-warn.mjs").write_text("// stock context-warn\n")
+    settings = {"hooks": {"PreToolUse": [hook_entry("test-layer-guard.mjs")], "Stop": [hook_entry("context-warn.mjs")]}}
+    (repo / ".claude/settings.json").write_text(json.dumps(settings))
+    git(repo, "init", "-b", "main")
+    for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        git(repo, "config", key, value)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "initial")
+    return repo
+
+
+def apply_args(tmp_path: Path, target: Path, version: str = "v0.1.0") -> list[str]:
+    known = {name: [hashlib.sha256((target / name).read_bytes()).hexdigest()] for name in LOCAL_HOOKS if (target / name).exists()}
+    known_file = tmp_path / "known.json"
+    known_file.write_text(json.dumps(known))
+    return [
+        "apply", str(target), "--version", version, "--test-command", "true", "--no-pr",
+        "--kit-home", str(tmp_path / "kit-home"), "--root", str(tmp_path / "projects"),
+        "--known-hashes", str(known_file),
+    ]
+
+
+def commits(repo: Path) -> int:
+    return int(subprocess.run(["git", "rev-list", "--count", "HEAD"], cwd=repo, capture_output=True, text=True).stdout)
+
+
+@needs_node
+def test_apply_puts_the_version_into_the_repo_on_a_branch(tmp_path, target, kit_repo):
+    argv = apply_args(tmp_path, target)
+    before = commits(target)
+    assert main(argv) == 0
+    assert subprocess.run(["git", "branch", "--show-current"], cwd=target, capture_output=True, text=True).stdout.strip() == BRANCH
+    applies = json.loads((target / ".claude/kit.json").read_text())["applies"]
+    assert [a["version"] for a in applies] == ["v0.1.0"] and len(applies[0]["commit"]) == 40
+    assert "kit@kit-v0-1-0" in json.loads((target / ".claude/settings.json").read_text())["enabledPlugins"]
+    assert not any((target / name).exists() for name in LOCAL_HOOKS)
+    assert (target / ".claude/kit-bench/baseline.json").is_file()
+    assert (target / "docs/token-strategy.md").is_file() and (target / ".claude/test-layers.json").is_file()
+    assert commits(target) == before + 2
+    assert subprocess.run(["git", "status", "--porcelain"], cwd=target, capture_output=True, text=True).stdout == ""
+    assert sorted(p.name for p in (tmp_path / "kit-home").iterdir()) == ["v0.1.0"]
+
+
+@needs_node
+def test_apply_twice_stops_with_already_on_and_adds_no_commit(tmp_path, target, kit_repo, capsys):
+    argv = apply_args(tmp_path, target)
+    assert main(argv) == 0
+    count = commits(target)
+    assert main(argv) == 1
+    assert "error: already on v0.1.0" in capsys.readouterr().err
+    assert commits(target) == count
+
+
+@needs_node
+def test_apply_a_newer_version_replaces_the_marketplace_entry(tmp_path, target, kit_repo):
+    assert main(apply_args(tmp_path, target)) == 0
+    manifest = kit_repo / "plugin/.claude-plugin/plugin.json"
+    manifest.write_text(manifest.read_text().replace("0.1.0", "0.1.1"))
+    git(kit_repo, "commit", "-am", "release 0.1.1")
+    tag(kit_repo, "v0.1.1")
+    assert main(apply_args(tmp_path, target, "v0.1.1")) == 0
+    settings = json.loads((target / ".claude/settings.json").read_text())
+    assert list(settings["extraKnownMarketplaces"]) == ["kit-v0-1-1"] and list(settings["enabledPlugins"]) == ["kit@kit-v0-1-1"]
+    assert [a["version"] for a in json.loads((target / ".claude/kit.json").read_text())["applies"]] == ["v0.1.0", "v0.1.1"]
+
+
+def test_apply_on_a_dirty_repo_stops_before_any_change(tmp_path, target, kit_repo, capsys):
+    (target / "scratch.txt").write_text("wip")
+    assert main(apply_args(tmp_path, target)) == 1
+    assert "error: uncommitted changes" in capsys.readouterr().err
+    assert not (tmp_path / "kit-home").exists()

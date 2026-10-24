@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from kit.settings_edit import read_settings
 AGENT_KEYS = ("name", "description", "model", "tools")
 CONTEXT_WARN_STEP = "80000"
 PROBE_TEST = Path("tests") / "test_kit_probe.py"
+SCRATCH_PREFIX = ".tmp-verify-"
 
 
 @dataclass(frozen=True)
@@ -104,3 +107,23 @@ def run_checks(plugin: Path, repo: Path, layers: dict, test_command: str, tmp: P
         check_agents(plugin),
         check_tests(repo, test_command, run_input),
     ]
+
+
+def verify(plugin: Path, repo: Path, layers: dict, test_command: str, kit_home: Path, run_input: RunInput) -> list[Check]:
+    """run_checks with a scratch dir inside kit_home (apply writes only there and in the repo), removed afterwards."""
+    kit_home.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(dir=kit_home, prefix=SCRATCH_PREFIX))
+    try:
+        return run_checks(plugin, repo, layers, test_command, tmp, run_input)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def check_line(check: Check) -> str:
+    return f"{'PASS' if check.passed else 'FAIL'} {check.name}: {check.detail}"
+
+
+def require_passing(checks: list[Check], branch: str) -> None:
+    failed = [f"{c.name}: {c.detail}" for c in checks if not c.passed]
+    if failed:
+        raise KitError(f"checks failed: {'; '.join(failed)}; branch {branch} left for inspection; no PR")

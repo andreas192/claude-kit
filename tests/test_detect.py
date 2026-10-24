@@ -1,9 +1,10 @@
+import json
 from pathlib import Path
 
 import pytest
 
 from kit import detect as detection
-from kit.detect import detect, resolve, wiring_functions_from_guard
+from kit.detect import ask_with_default, checked_answers, checked_ask, detect, previous_answers, resolve, wiring_functions_from_guard
 from kit.errors import KitError
 
 # Real WIRING lines, verbatim from dividend-growth and investment.
@@ -127,3 +128,58 @@ def test_unsupported_stack(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     with pytest.raises(KitError, match="python-uv"):
         detect(tmp_path)
+
+
+def test_empty_flag_answers_for_test_command_and_pipeline_test_are_refused():
+    for key, flag in (("test_command", "--test-command"), ("pipeline_test", "--pipeline-test")):
+        with pytest.raises(KitError, match=flag):
+            checked_answers({key: "  "})
+
+
+def test_empty_wiring_functions_answer_is_allowed():
+    assert checked_answers({"wiring_functions": ""}) == {"wiring_functions": ""}
+
+
+def test_checked_ask_refuses_an_empty_answer_naming_the_flag():
+    ask = checked_ask(lambda key, proposal: "")
+    with pytest.raises(KitError, match="--pipeline-test"):
+        ask("pipeline_test", "tests/test_cli_pipeline.py")
+    assert ask("wiring_functions", "") == ""
+
+
+def test_checked_ask_passes_a_real_answer_through_and_none_stays_none():
+    assert checked_ask(lambda key, proposal: "uv run pytest")("test_command", "") == "uv run pytest"
+    assert checked_ask(None) is None
+
+
+def test_ask_with_default_returns_the_proposal_on_an_empty_line():
+    prompts = []
+    ask = ask_with_default(lambda prompt: prompts.append(prompt) or "")
+    assert ask("test_command", "uv run pytest -q") == "uv run pytest -q"
+    assert "test_command" in prompts[0] and "uv run pytest -q" in prompts[0]
+    assert ask_with_default(lambda prompt: "other")("test_command", "x") == "other"
+
+
+def write_layers(repo, functions):
+    (repo / ".claude/test-layers.json").write_text(json.dumps({"wiring_functions": functions}))
+
+
+def test_previous_answers_take_the_wiring_functions_from_the_last_apply(dgi_repo):
+    (dgi_repo / ".claude/hooks/test-layer-guard.mjs").unlink()
+    write_layers(dgi_repo, ["run_a", "run_b"])
+    d = detect(dgi_repo)
+    assert previous_answers(dgi_repo, d) == {"wiring_functions": "run_a,run_b"}
+    assert resolve(d, previous_answers(dgi_repo, d), None).wiring_functions == ("run_a", "run_b")
+
+
+def test_previous_answers_are_ignored_while_the_guard_still_says_it(dgi_repo):
+    write_layers(dgi_repo, ["stale"])
+    assert previous_answers(dgi_repo, detect(dgi_repo)) == {}
+
+
+@pytest.mark.parametrize("text", [None, "{oops", "[]", "{}", '{"wiring_functions": 3}'])
+def test_previous_answers_fall_back_to_asking_when_the_file_is_unusable(dgi_repo, text):
+    (dgi_repo / ".claude/hooks/test-layer-guard.mjs").unlink()
+    if text is not None:
+        (dgi_repo / ".claude/test-layers.json").write_text(text)
+    assert previous_answers(dgi_repo, detect(dgi_repo)) == {}
