@@ -4,6 +4,7 @@ import hashlib
 import json
 import subprocess
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -183,11 +184,22 @@ class FakeEnv:
             self.committed = saved
         if line.startswith("git push"):
             self.pushed = self.head
+            pushed_status = self.worktree / ".loop" / "status.json"
+            if pushed_status.exists() and self.branch in self.tips:
+                self.tips[self.branch] = pushed_status.read_text()
             if self.branch not in self.branches:
                 self.branches.append(self.branch)
         if line.startswith("gh pr create"):
+            if any(p.head == cmd[cmd.index("--head") + 1] and p.state == "OPEN" for p in self.prs):
+                raise subprocess.CalledProcessError(1, cmd, stderr="a pull request for this branch already exists")
             body = cmd[cmd.index("--body") + 1] if "--body" in cmd else ""
             self.add_pr("--draft" in cmd, body)
+        if line.startswith("gh pr edit"):
+            number = int(cmd[3])
+            self.prs = [replace(p, body=cmd[cmd.index("--body") + 1], title=cmd[cmd.index("--title") + 1]) if p.number == number else p for p in self.prs]
+        if line.startswith("gh pr ready --undo"):
+            number = int(cmd[4])
+            self.prs = [replace(p, is_draft=True) if p.number == number else p for p in self.prs]
         return ""
 
     def env(self) -> Env:
@@ -398,6 +410,36 @@ def test_park_opens_a_draft_pr_and_moves_on(tmp_path):
     assert "Plan: docs/superpowers/plans/2026-10-17-row-a.md" in body
     assert json.loads(f.state.read_text())["opened"] == []  # cleared by the note that followed
     assert "build" not in f.stages
+
+
+def test_a_resumed_item_that_parks_again_edits_its_open_draft(tmp_path):
+    questions = "# Spec\n\n## Questions for the owner\n- New question? Recommended: yes\n"
+    f = FakeEnv(tmp_path, scripts(), branches=["loop/a"], roadmap=ROADMAP_A_ACTIVE, spec_text=questions)
+    resume_status(f, "pr")
+    (f.worktree / "spec.md").write_text(questions)
+    f.tips["loop/a"] = json.dumps({"stage": "pr"})
+    f.branch = "loop/a"
+    f.add_pr(draft=True, body="old body")
+    assert run(f.env()) == "done"
+    assert f.drafts() == []
+    (edit,) = [c for c in f.cmds if c[:3] == ["gh", "pr", "edit"]]
+    assert edit[3] == "1" and edit[edit.index("--title") + 1] == "loop (parked): Row A"
+    body = edit[edit.index("--body") + 1]
+    assert parse_park_body(body).questions == ("New question? Recommended: yes",)
+    assert not any("environment failure" in m for m in f.logs)
+    assert json.loads(f.state.read_text())["opened"] == []  # recorded, then cleared by the note
+
+
+def test_re_parking_a_head_whose_draft_was_marked_ready_puts_it_back_to_draft(tmp_path):
+    questions = "# Spec\n\n## Questions for the owner\n- Q?\n"
+    f = FakeEnv(tmp_path, scripts(), branches=["loop/a"], roadmap=ROADMAP_A_ACTIVE, spec_text=questions)
+    resume_status(f, "pr")
+    (f.worktree / "spec.md").write_text(questions)
+    f.tips["loop/a"] = json.dumps({"stage": "pr"})
+    f.branch = "loop/a"
+    f.add_pr(draft=False)
+    run(f.env())
+    assert "gh pr ready --undo 1" in f.lines() and f.drafts() == []
 
 
 def test_the_parked_draft_names_the_configured_base_branch(tmp_path):

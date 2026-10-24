@@ -172,11 +172,22 @@ def _save_stage(env: Env, branch: str, status: Status, stage: str) -> None:
     _commit(env, branch, f"chore(loop): {status.key} stage {stage}", [".loop/status.json"])
 
 
+def _open_prs(env: Env, branch: str) -> list[dict]:
+    return json.loads(env.sh(["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number,isDraft"]))
+
+
 def _open_draft(env: Env, branch: str, status: Status | None, reason: str) -> None:
     key = status.key if status else branch.removeprefix("loop/")
     spec, plan = (status.spec, status.plan) if status else ("", "")
     body = park_body(reason, spec, plan, owner_questions(_read(env.worktree / spec)) if spec else [])
     title = f"loop (parked): {status.row if status else key}"
+    existing = _open_prs(env, branch)
+    if existing:
+        number = str(existing[0]["number"])
+        env.sh(["gh", "pr", "edit", number, "--title", title, "--body", body])
+        if not existing[0]["isDraft"]:
+            env.sh(["gh", "pr", "ready", "--undo", number])
+        return
     cmd = ["gh", "pr", "create", "--draft", "--base", env.config.base_branch, "--title", title, "--body", body]
     env.sh([*cmd, "--head", branch])
 
@@ -204,8 +215,7 @@ def _branch_prs(env: Env, branch: str, fields: str) -> list[dict]:
 
 
 def _ready_prs(env: Env, branch: str) -> list[dict]:
-    open_prs = json.loads(env.sh(["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number,isDraft"]))
-    return [p for p in open_prs if not p["isDraft"]]
+    return [p for p in _open_prs(env, branch) if not p["isDraft"]]
 
 
 def _record_opened(env: Env, branch: str) -> None:

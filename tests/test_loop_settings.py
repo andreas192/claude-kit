@@ -30,3 +30,20 @@ def test_repo_extras_are_unioned_without_duplicates(tmp_path):
 def test_base_denies_pushes_merges_and_installs():
     deny = base_settings()["permissions"]["deny"]
     assert {"Bash(git push*)", "Bash(gh pr merge*)", "Bash(pip *)", "Bash(uv tool *)"} <= set(deny)
+
+
+def test_extra_rules_with_parent_paths_are_pinned_to_the_repo_not_the_worktree(tmp_path):
+    repo = tmp_path / "dividend-growth"
+    repo.mkdir()
+    extra = {
+        "permissions": {
+            "allow": ["Edit(./**)", "Read(./../shared/**)"],
+            "deny": ["Read(../investment/data/**)", "Bash(rm -rf ../x)", "Write(src/**)"],
+        }
+    }
+    s = loop_settings(base_settings(), extra, repo, (), "uv run pytest -q", tmp_path / "rt")
+    allow, deny = s["permissions"]["allow"], s["permissions"]["deny"]
+    assert f"Read(/{tmp_path.resolve()}/investment/data/**)" in deny
+    assert "Read(../investment/data/**)" not in deny
+    assert f"Read(/{tmp_path.resolve()}/shared/**)" in allow
+    assert "Edit(./**)" in allow and "Write(src/**)" in deny and "Bash(rm -rf ../x)" in deny
