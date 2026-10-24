@@ -11,6 +11,7 @@ from kit.gitrun import Runner
 
 STARTER_DIR = "starter"
 PERMISSIONS = "permissions.json"
+BENCH_IGNORE = Path(".claude") / "kit-bench" / ".gitignore"
 
 
 @dataclass(frozen=True)
@@ -34,3 +35,13 @@ def copy_missing(repo: Path, files: dict[str, str]) -> list[str]:
         (repo / name).parent.mkdir(parents=True, exist_ok=True)
         (repo / name).write_text(files[name])
     return added
+
+
+def ignore_bench_reports(repo: Path) -> list[str]:
+    """`kit bench` writes dated .md reports beside the tracked baseline.json; ignore them so the next apply sees a clean tree."""
+    path = repo / BENCH_IGNORE
+    if path.exists():
+        return []
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("*.md\n")
+    return [str(BENCH_IGNORE)]

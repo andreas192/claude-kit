@@ -1,11 +1,13 @@
 """UNIT: kit.gitops, the git and gh calls `apply` makes on the target repo."""
 
+import subprocess
 from pathlib import Path
 
 import pytest
 from builders import commit, git
 
-from kit.gitops import commit_all, commit_time, create_branch, is_clean, open_pr, pr_body
+from kit.errors import KitError
+from kit.gitops import commit_all, commit_time, create_branch, is_clean, open_pr, pr_body, retry_hint, retry_hint_on_failure
 from kit.gitrun import run
 from kit.migrate import Migration
 from kit.verify import Check
@@ -62,11 +64,62 @@ class Recorder:
 
 def test_open_pr_pushes_the_branch_then_returns_the_url_line(tmp_path: Path) -> None:
     recorder = Recorder("Creating pull request\nhttps://github.com/o/r/pull/7\n")
-    assert open_pr(tmp_path, "title", "body", recorder) == "https://github.com/o/r/pull/7"
+    assert open_pr(tmp_path, "chore/x", "title", "body", recorder) == "https://github.com/o/r/pull/7"
     assert recorder.calls == [
         ["git", "push", "-u", "origin", "HEAD"],
         ["gh", "pr", "create", "--title", "title", "--body", "body"],
     ]
+
+
+def failing_gh(cmd: list[str], cwd: Path) -> str:
+    if cmd[0] == "gh":
+        raise KitError("gh pr create failed: not logged in")
+    return ""
+
+
+def test_open_pr_failure_after_the_push_names_the_pushed_branch(tmp_path: Path) -> None:
+    with pytest.raises(KitError, match=r"gh pr create failed: not logged in; pushed chore/x; run gh pr create by hand"):
+        open_pr(tmp_path, "chore/x", "title", "body", failing_gh)
+
+
+def test_open_pr_with_empty_gh_output_is_an_error_naming_the_branch(tmp_path: Path) -> None:
+    with pytest.raises(KitError, match="no URL.*pushed chore/x"):
+        open_pr(tmp_path, "chore/x", "title", "body", Recorder(""))
+
+
+def test_open_pr_push_failure_is_not_reworded(tmp_path: Path) -> None:
+    def failing_push(cmd: list[str], cwd: Path) -> str:
+        raise KitError("git push failed: no remote")
+
+    with pytest.raises(KitError) as raised:
+        open_pr(tmp_path, "chore/x", "title", "body", failing_push)
+    assert str(raised.value) == "git push failed: no remote"
+
+
+def test_retry_hint_undoes_a_failed_apply(repo: Path) -> None:
+    create_branch(repo, "chore/x", run)
+    (repo / "a.txt").write_text("changed")
+    (repo / "new.txt").write_text("x")
+    (repo / ".claude").mkdir()
+    (repo / ".claude" / "kit.json").write_text("{}")
+    subprocess.run(["sh", "-c", retry_hint("chore/x").removeprefix("to retry: ")], cwd=repo, check=True, capture_output=True)
+    assert run(["git", "branch", "--show-current"], repo).strip() == "main"
+    assert run(["git", "branch", "--list", "chore/x"], repo).strip() == ""
+    assert is_clean(repo, run) and not (repo / "new.txt").exists() and (repo / "a.txt").read_text() == "1"
+
+
+def test_retry_hint_on_failure_appends_the_hint_to_a_kit_error() -> None:
+    with pytest.raises(KitError, match="boom; to retry: .*git branch -D chore/x"):
+        with retry_hint_on_failure("chore/x"):
+            raise KitError("boom")
+
+
+def test_retry_hint_on_failure_leaves_other_errors_and_success_alone() -> None:
+    with retry_hint_on_failure("chore/x"):
+        pass
+    with pytest.raises(ValueError):
+        with retry_hint_on_failure("chore/x"):
+            raise ValueError("x")
 
 
 def test_pr_body_lists_each_section_with_its_lines() -> None:

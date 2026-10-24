@@ -1,6 +1,7 @@
 """UNIT: kit.starter, starter files read from a version tag and copied only where missing."""
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ from builders import commit, git, tag
 
 from kit.errors import KitError
 from kit.gitrun import run
-from kit.starter import copy_missing, read_starter
+from kit.starter import copy_missing, ignore_bench_reports, read_starter
 
 
 @pytest.fixture
@@ -52,3 +53,20 @@ def test_copy_missing_writes_only_absent_targets_and_lists_them(tmp_path: Path) 
     assert added == ["docs/token-strategy.md"]
     assert (tmp_path / "CLAUDE.md").read_text() == "mine\n"
     assert (tmp_path / "docs/token-strategy.md").read_text() == "strategy\n"
+
+
+def test_ignore_bench_reports_adds_a_gitignore_that_hides_reports_not_the_baseline(tmp_path: Path) -> None:
+    git(tmp_path, "init", "-b", "main")
+    assert ignore_bench_reports(tmp_path) == [".claude/kit-bench/.gitignore"]
+    bench = tmp_path / ".claude" / "kit-bench"
+    (bench / "2026-10-24.md").write_text("report\n")
+    (bench / "baseline.json").write_text("{}\n")
+    status = subprocess.run(["git", "status", "--porcelain", "-uall"], cwd=tmp_path, capture_output=True, text=True).stdout
+    assert "2026-10-24.md" not in status and "baseline.json" in status
+
+
+def test_ignore_bench_reports_keeps_an_existing_gitignore(tmp_path: Path) -> None:
+    (tmp_path / ".claude" / "kit-bench").mkdir(parents=True)
+    (tmp_path / ".claude" / "kit-bench" / ".gitignore").write_text("mine\n")
+    assert ignore_bench_reports(tmp_path) == []
+    assert (tmp_path / ".claude" / "kit-bench" / ".gitignore").read_text() == "mine\n"

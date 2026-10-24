@@ -239,6 +239,9 @@ def test_apply_with_a_failing_test_command_leaves_the_branch_and_records_nothing
     assert subprocess.run(["git", "branch", "--show-current"], cwd=target, capture_output=True, text=True).stdout.strip() == BRANCH
     assert not (target / ".claude/kit.json").exists()
     assert commits(target) == 1
+    hint = err.split("to retry: ", 1)[1].strip()
+    subprocess.run(["sh", "-c", hint], cwd=target, check=True, capture_output=True)
+    assert main(apply_args(tmp_path, target)) == 0
 
 
 def test_apply_on_a_dirty_repo_stops_before_any_change(tmp_path, target, kit_repo, capsys):
