@@ -16,7 +16,7 @@ from kit.settings_edit import read_settings
 
 AGENT_KEYS = ("name", "description", "model", "tools")
 CONTEXT_WARN_STEP = "80000"
-PROBE_TEST = Path("tests") / "test_kit_probe.py"
+PROBE_TEST = "test_kit_probe.py"
 SCRATCH_PREFIX = ".tmp-verify-"
 
 
@@ -47,13 +47,14 @@ def _guard_output(plugin: Path, repo: Path, run_input: RunInput, file: Path, tex
 
 def check_guard(plugin: Path, repo: Path, layers: dict, run_input: RunInput) -> Check:
     probe = f"from {layers['package']}.{layers['wiring_modules'][0]} import x"
+    probe_test = Path(layers["pipeline_test"]).parent / PROBE_TEST
     try:
-        denied = _guard_output(plugin, repo, run_input, repo / PROBE_TEST, probe)
+        denied = _guard_output(plugin, repo, run_input, repo / probe_test, probe)
         pipeline = _guard_output(plugin, repo, run_input, repo / layers["pipeline_test"], probe)
     except (KitError, json.JSONDecodeError) as error:
         return Check("guard", False, str(error))
     if denied.get("permissionDecision") != "deny":
-        return Check("guard", False, f"a wiring import in {PROBE_TEST} was not denied")
+        return Check("guard", False, f"a wiring import in {probe_test} was not denied")
     if "additionalContext" not in pipeline:
         return Check("guard", False, f"{layers['pipeline_test']} did not get the pipeline-layer context")
     return Check("guard", True, "wiring imports denied in unit tests; pipeline test gets its contract")

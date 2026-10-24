@@ -109,7 +109,15 @@ def test_missing_pytest_and_pipeline_test_are_unresolved_and_named_by_flags(dgi_
 
 def test_package_falls_back_to_project_name(dgi_repo):
     (dgi_repo / "pyproject.toml").write_text('[project]\nname = "my-app"\n[dependency-groups]\ndev = ["pytest"]\n')
+    (dgi_repo / "src" / "dgi").rename(dgi_repo / "src" / "my_app")
     assert detect(dgi_repo).package == "my_app"
+
+
+def test_a_repo_without_cli_or_pipeline_modules_is_refused(dgi_repo):
+    (dgi_repo / "src" / "dgi" / "cli.py").unlink()
+    (dgi_repo / "src" / "dgi" / "pipeline.py").unlink()
+    with pytest.raises(KitError, match=r"no wiring modules \(cli.py/pipeline.py\) under"):
+        detect(dgi_repo)
 
 
 def test_test_layers_json_is_the_hook_config(dgi_repo):

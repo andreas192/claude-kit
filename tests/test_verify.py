@@ -57,6 +57,13 @@ def test_guard_passes_with_the_repos_own_layers(tmp_path: Path) -> None:
 
 
 @needs_node
+def test_guard_probes_beside_a_nested_pipeline_test(tmp_path: Path) -> None:
+    nested = {**LAYERS, "pipeline_test": "tests/e2e/test_cli_pipeline.py"}
+    check = check_guard(PLUGIN, repo_with(tmp_path, nested), nested, run_input)
+    assert check.passed, check.detail
+
+
+@needs_node
 def test_guard_fails_when_the_layers_target_another_package(tmp_path: Path) -> None:
     written = {**LAYERS, "package": "other", "wiring_modules": ["web"]}
     check = check_guard(PLUGIN, repo_with(tmp_path, written), LAYERS, run_input)

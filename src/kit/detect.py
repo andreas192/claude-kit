@@ -109,6 +109,8 @@ def detect(repo: Path) -> Detected:
         unresolved.append("pipeline_test")
 
     modules = tuple(m for m in WIRING_MODULES if _module_path(repo, package, m))
+    if not modules:
+        raise KitError(f"no wiring modules (cli.py/pipeline.py) under {repo} for package {package}")
 
     guard = repo / GUARD_PATH
     if guard.is_file():
