@@ -4,10 +4,10 @@ import json
 
 import pytest
 
-from builders import commit, git, tag
+from builders import add_loop_package, commit, git, tag
 from kit.errors import KitError
 from kit.gitrun import run
-from kit.snapshot import latest_tag, marketplace_name, snapshot, tree_digest
+from kit.snapshot import latest_tag, marketplace_name, snapshot, tag_has_loop, tree_digest
 
 PLUGIN_JSON = json.dumps({"name": "kit", "version": "0.1.0"})
 
@@ -101,6 +101,34 @@ def test_tag_without_plugin_folder_is_refused(kit_repo, tmp_path):
     with pytest.raises(KitError):
         snapshot(kit_repo, "v0.3.0", tmp_path / "home", run)
     assert list((tmp_path / "home").iterdir()) == []
+
+
+def test_snapshot_of_a_tag_with_the_loop_holds_src(kit_repo, tmp_path):
+    add_loop_package(kit_repo)
+    tag(kit_repo, "v0.2.0", plugin_version="0.2.0")
+    path = snapshot(kit_repo, "v0.2.0", tmp_path / "home", run)
+    assert (path / "src/kit/loop/__init__.py").exists() and (path / "plugins/kit").is_dir()
+    assert (path / "src/kit/cli.py").exists()
+
+
+def test_snapshot_of_a_tag_without_the_loop_has_no_src(kit_repo, tmp_path):
+    assert not (snapshot(kit_repo, "v0.1.0", tmp_path / "home", run) / "src").exists()
+
+
+def test_src_holds_the_tag_and_ignores_the_working_tree(kit_repo, tmp_path):
+    add_loop_package(kit_repo)
+    tag(kit_repo, "v0.2.0", plugin_version="0.2.0")
+    (kit_repo / "src/kit/cli.py").write_text("edited, not tagged")
+    path = snapshot(kit_repo, "v0.2.0", tmp_path / "home", run)
+    assert (path / "src/kit/cli.py").read_text() == ""
+    assert leftovers(tmp_path / "home") == ["v0.2.0"]
+
+
+def test_tag_has_loop_only_with_a_loop_folder(kit_repo):
+    assert not tag_has_loop(kit_repo, "v0.1.0", run)
+    add_loop_package(kit_repo)
+    tag(kit_repo, "v0.2.0", plugin_version="0.2.0")
+    assert tag_has_loop(kit_repo, "v0.2.0", run)
 
 
 def test_latest_tag_is_semver_ordered(kit_repo):

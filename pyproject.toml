@@ -1,6 +1,6 @@
 [project]
 name = "claude-kit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Versioned Claude Code kit: plugin agents and hooks, applied per repo, benchmarked per version"
 requires-python = ">=3.12"
 dependencies = []

@@ -17,11 +17,38 @@
     "009d1011215786949e102e80caedf8c46403ce9090d44574f43c88931150817d",
     "f08fa1ba1aca83129baa72f66e4f245b23c4f219c8129cbbdb64e201718e0094"
   ],
+  "scripts/feature_loop.py": [
+    "7992041440ff60da360fa667d59df5eda7a5fd64924795fbada09bdcc523a9cf"
+  ],
+  "scripts/feature_loop.sh": [
+    "57451d04315079de8e39b66f01a92f4527e056049601550852227a0b987767c7"
+  ],
+  "scripts/loop_prompts/build.md": [
+    "d4fd85f05531effd2c63cf1b168c805a506443904f6da7716177120e6d218340"
+  ],
+  "scripts/loop_prompts/pick.md": [
+    "6d910ed9f0b8bc2f96f750c24fb63bd8983dee758f866a34971afefddb93f763"
+  ],
+  "scripts/loop_prompts/plan.md": [
+    "d382d752ee2c6d0fc87860d22feb628f7a258de2addf1189d68fc35aebb38631"
+  ],
+  "scripts/loop_prompts/pr.md": [
+    "6bd89a163cfc3bd2b2a50077fdcbc6acd91e02e903779cae8b15cee2183ca846"
+  ],
+  "scripts/loop_prompts/probe.md": [
+    "2ae76720092735f096d1e978e1f9a883a1a91dbb7bd49814814bdfdf73c33a67"
+  ],
+  "scripts/loop_prompts/spec.md": [
+    "50092c85f376fba5a2b31da9567dfbc8243052cd9ee63c95abb44a8336a9a92f"
+  ],
   "scripts/token_report.py": [
     "6a93c3e76d7e78a16e26dd5fcc5cf0234f3c5df15dd804dae24791f5456b44a4"
   ],
   "tests/test_context_warn_hook.py": [
     "b5ca34f18902df06e7cd0f2feecd7c902ac82a53e29c40e61323c6d5957f9d02"
+  ],
+  "tests/test_feature_loop.py": [
+    "9b52a46cc806c32a421a5dce56e37bbb5fd1889f3f4be153c5ae625cc5ad8e31"
   ],
   "tests/test_token_report.py": [
     "1c82118c800519f0348ce7145336c015132dea4b1e05a7881d4c69baaf6117a5"

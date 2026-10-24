@@ -6,7 +6,19 @@ import pytest
 
 from builders import commit, git
 from kit.gitrun import run
-from kit.migrate import CANDIDATES, Migration, apply_migration, load_known, plan_migration, prose_mentions, prose_outside
+from pathlib import Path
+
+from kit.migrate import (
+    CANDIDATES,
+    Migration,
+    apply_migration,
+    load_known,
+    loop_notes,
+    plan_migration,
+    prose_mentions,
+    prose_outside,
+    roadmap_files,
+)
 
 
 def sha(text: str) -> str:
@@ -95,3 +107,69 @@ def test_packaged_known_hashes_cover_dividend_growth_files():
 def test_prose_outside_drops_hits_in_files_this_apply_added():
     hits = ["CLAUDE.md:3", "docs/token-strategy.md:54", "docs/token-strategy.md.bak:1"]
     assert prose_outside(hits, ["docs/token-strategy.md"]) == ["CLAUDE.md:3", "docs/token-strategy.md.bak:1"]
+
+
+LOOP_FILES = (
+    "scripts/feature_loop.py",
+    "scripts/feature_loop.sh",
+    *(f"scripts/loop_prompts/{name}.md" for name in ("build", "pick", "plan", "pr", "probe", "spec")),
+    "tests/test_feature_loop.py",
+)
+
+
+def test_the_old_loop_files_are_candidates():
+    assert set(LOOP_FILES) <= set(CANDIDATES)
+
+
+def test_the_old_loop_files_with_known_hashes_are_removed(tmp_path):
+    for name in LOOP_FILES:
+        write(tmp_path, name, f"old {name}")
+    known = {name: [sha(f"old {name}")] for name in LOOP_FILES}
+    assert plan_migration(tmp_path, known) == Migration(tuple(n for n in CANDIDATES if n in LOOP_FILES), ())
+
+
+def test_an_edited_feature_loop_is_kept_as_an_override(tmp_path):
+    write(tmp_path, "scripts/feature_loop.py", "edited")
+    write(tmp_path, "scripts/feature_loop.sh", "stock")
+    known = {"scripts/feature_loop.py": [sha("stock")], "scripts/feature_loop.sh": [sha("stock")]}
+    assert plan_migration(tmp_path, known) == Migration(("scripts/feature_loop.sh",), ("scripts/feature_loop.py",))
+
+
+def test_prose_mentions_name_the_old_loop(git_repo):
+    commit(git_repo, {"docs/a.md": "run feature_loop.sh\nsee loop_prompts/pick.md\n"}, "c", "2026-10-01T10:00:00Z")
+    assert prose_mentions(git_repo, run) == ["docs/a.md:1", "docs/a.md:2"]
+
+
+def test_roadmap_files_lists_old_roadmaps_but_not_the_new_one(git_repo):
+    files = {
+        "docs/superpowers/specs/2026-10-05-dgi-roadmap.md": "x",
+        "docs/next-steps.md": "x",
+        "docs/roadmap.md": "x",
+        "docs/other.md": "x",
+        "README.md": "x",
+    }
+    commit(git_repo, files, "c", "2026-10-01T10:00:00Z")
+    assert roadmap_files(git_repo, run) == ["docs/next-steps.md", "docs/superpowers/specs/2026-10-05-dgi-roadmap.md"]
+
+
+def test_roadmap_files_is_empty_without_any(git_repo):
+    commit(git_repo, {"docs/roadmap.md": "x"}, "c", "2026-10-01T10:00:00Z")
+    assert roadmap_files(git_repo, run) == []
+
+
+def test_loop_notes_come_in_the_stated_order():
+    agents = [Path("/a/com.old.one.plist"), Path("/a/com.old.two.plist")]
+    assert loop_notes(True, agents, False, Path("/r/app")) == [
+        "before merging, run scripts/feature_loop.sh uninstall in the repo (loaded: com.old.one.plist)",
+        "before merging, run scripts/feature_loop.sh uninstall in the repo (loaded: com.old.two.plist)",
+        "after merging, run kit loop install /r/app",
+        "add a loop section to .claude/kit.json (see the spec)",
+    ]
+
+
+def test_loop_notes_are_empty_for_a_repo_without_a_loop():
+    assert loop_notes(False, [], False, Path("/r/app")) == []
+
+
+def test_loop_notes_skip_the_section_hint_when_the_section_exists():
+    assert loop_notes(True, [], True, Path("/r/app")) == ["after merging, run kit loop install /r/app"]

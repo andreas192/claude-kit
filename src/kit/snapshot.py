@@ -59,6 +59,21 @@ def export_plugin(kit_repo: Path, version: str, work: Path, stage: Path, run: Ru
         tar.extractall(destination, filter="data")
 
 
+def tag_has_loop(kit_repo: Path, version: str, run: Runner) -> bool:
+    """True when the tag ships the loop package, so its snapshot must hold the code to run it from."""
+    return bool(run(["git", "ls-tree", "-d", version, "src/kit/loop"], kit_repo).strip())
+
+
+def export_src(kit_repo: Path, version: str, work: Path, stage: Path, run: Runner) -> None:
+    """Extract the tag's src/kit into stage/src/kit; the tar stays outside stage."""
+    archive = work / "src.tar"
+    run(["git", "archive", "--format=tar", "-o", str(archive), f"{version}:src/kit"], kit_repo)
+    destination = stage / "src" / "kit"
+    destination.mkdir(parents=True)
+    with tarfile.open(archive) as tar:
+        tar.extractall(destination, filter="data")
+
+
 def write_marketplace(stage: Path, version: str) -> None:
     manifest = {
         "name": marketplace_name(version),
@@ -97,6 +112,8 @@ def snapshot(kit_repo: Path, version: str, kit_home: Path, run: Runner) -> Path:
         export_plugin(kit_repo, version, work, stage, run)
         write_marketplace(stage, version)
         check_plugin_version(stage, version)
+        if tag_has_loop(kit_repo, version, run):
+            export_src(kit_repo, version, work, stage, run)
         return install_snapshot(stage, kit_home / version, version)
     finally:
         shutil.rmtree(work, ignore_errors=True)
