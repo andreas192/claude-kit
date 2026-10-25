@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+Weekly insights.
+
+- The loop driver appends each stage session (cost $, tokens, duration, turns, outcome, model, kit version, session id) and each run's stop reason to `~/.claude/kit/loop/<repo>/stages.jsonl`.
+- `kit insights run|install|uninstall`: a weekly report in `~/.claude/kit/insights/<YYYY>-W<ww>.md` for every kit repo under `--base`. It holds the loop's numbers by week and by kit version, and session benchmarks by week and by kit version, with loop sessions left out. Fixed-rule findings follow, then the suggested changes of a read-only Sonnet advisor (`--no-advise` skips it). `install` runs it from launchd on Mondays at 09:00 and shows a notification.
+
 ## v0.2.0 — 2026-10-24
 
 Roadmap and feature loop.

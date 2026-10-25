@@ -5,7 +5,7 @@ import json
 import os
 import shutil
 import subprocess
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,6 +16,8 @@ from kit.bench.transcripts import transcript_dir_name
 from kit import cli
 from kit.cli import main
 from kit.gitrun import run
+from kit.loop.ledger import StageEntry, append_entry
+from kit.loop.stream import StageCost
 from kit.kitfile import Apply, KitFile, LoopConfig, read_kitfile, write_kitfile
 from kit.snapshot import snapshot
 
@@ -384,3 +386,44 @@ def test_loop_run_hands_over_to_the_newer_snapshot_with_its_src_on_the_path(tmp_
     fake_bin(tmp_path, monkeypatch, {"gh": "echo '[]'"})
     assert main(["loop", "run", str(repo), "--weekend-ok", "--kit-home", str(kit_home)]) == 7
     assert marker.read_text() == f"loop run {repo.resolve()} --no-handover --kit-home {kit_home} --weekend-ok"
+
+
+@pytest.fixture
+def insights_base(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A base dir holding one kit repo with six sessions last week, one of them a loop stage in the ledger."""
+    base, root, home = tmp_path / "base", tmp_path / "projects", tmp_path / "kit-home"
+    repo = base / "repo"
+    repo.mkdir(parents=True)
+    git(repo, "init", "-b", "main")
+    write_kitfile(repo, KitFile("pytest", (Apply("v0.1.0", "abc", APPLIED),)))
+    commit(repo, {".claude/kit.json": (repo / ".claude/kit.json").read_text()}, "apply kit", APPLIED)
+    monday = date.today() - timedelta(days=date.today().weekday() + 7)
+    for i in range(6):
+        write_session(root, repo, f"s{i}", f"{monday}T0{i}:00:00Z", 90_000)
+    cost = StageCost(2.0, 1, 1, 1, 1, 1000, 5, "s0")
+    append_entry(home / "loop" / "repo", StageEntry(f"{monday}T00:30:00+00:00", "v0.1.0", "loop/a", "pr", "sonnet", "ok", cost))
+    return base, root, home
+
+
+def insights_args(base: Path, root: Path, home: Path) -> list[str]:
+    return ["insights", "run", "--base", str(base), "--root", str(root), "--kit-home", str(home), "--no-advise"]
+
+
+def test_insights_writes_the_weekly_report_without_loop_sessions(insights_base, capsys):
+    base, root, home = insights_base
+    assert main(insights_args(base, root, home)) == 0
+    out = capsys.readouterr().out
+    report = home / "insights" / f"{(date.today() - timedelta(days=7)).strftime('%G-W%V')}.md"
+    assert report.read_text() == out
+    assert "| $ per shipped item | - | - | - | - | - | 2.00 |" in out
+    sessions = cells(next(line for line in out.splitlines() if line.startswith("| sessions")))
+    assert sessions[1] == "5"  # s0 is the loop's own session
+    assert "- **S1** median peak context 90k" in out
+
+
+def test_insights_twice_leaves_the_same_report(insights_base, capsys):
+    base, root, home = insights_base
+    assert main(insights_args(base, root, home)) == 0
+    first = capsys.readouterr().out
+    assert main(insights_args(base, root, home)) == 0
+    assert capsys.readouterr().out == first

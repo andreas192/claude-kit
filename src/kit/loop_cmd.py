@@ -54,12 +54,12 @@ def program(repo: Path, which: Which = shutil.which) -> list[str]:
     return [uv, "run", "--no-project", "python", "-m", "kit.cli", "loop", "run", str(repo)]
 
 
-def loop_path(which: Which) -> str:
+def loop_path(which: Which, tools: tuple[str, ...] = LOOP_TOOLS, command: str = "kit loop install") -> str:
     dirs: list[str] = []
-    for tool in LOOP_TOOLS:
+    for tool in tools:
         found = which(tool)
         if found is None:
-            raise KitError(f"{tool} not found on PATH; install it before 'kit loop install'")
+            raise KitError(f"{tool} not found on PATH; install it before '{command}'")
         dirs.append(str(Path(found).parent))
     return ":".join([*dict.fromkeys(dirs), SYSTEM_PATH])
 
@@ -195,6 +195,7 @@ def real_env(repo: Path, runtime: Path, config: LoopConfig, test_command: str, w
         test_command=test_command,
         repo_name=repo.name,
         weekend_ok=weekend_ok,
+        kit_version=f"v{__version__}",
     )
 
 

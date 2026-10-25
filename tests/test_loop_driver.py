@@ -21,6 +21,9 @@ from kit.loop.driver import (
     render,
     run,
 )
+import pytest
+
+from kit.loop.ledger import StageEntry, StopEntry, read_ledger
 from kit.loop.prs import ATTRIBUTION, Pr, parse_park_body
 from kit.loop.state import Status, read_status, write_status
 from kit.loop.stream import Usage
@@ -842,3 +845,37 @@ def test_weekend_ok_overrides(tmp_path):
 def test_pick_only_on_sunday_is_weekend_without_reading_the_roadmap(tmp_path):
     f = FakeEnv(tmp_path, scripts(), now=lambda: SUNDAY)
     assert pick_only(f.env()) == "weekend" and f.cmds == []
+
+
+def test_each_stage_and_the_stop_go_to_the_ledger(tmp_path):
+    _, f = full_item(tmp_path)
+    entries = read_ledger(f.runtime)
+    stages = [(e.branch, e.stage, e.model, e.outcome) for e in entries if isinstance(e, StageEntry)]
+    b = "loop/row-a"
+    assert stages == [
+        ("", "probe", "haiku", "ok"),
+        (b, "spec", "opus", "ok"),
+        (b, "plan", "opus", "ok"),
+        (b, "build", "sonnet", "more"),
+        (b, "build", "sonnet", "ok"),
+        (b, "pr", "sonnet", "ok"),
+    ]
+    assert isinstance(entries[-1], StopEntry) and entries[-1].reason == "done"
+
+
+def test_a_crashed_run_records_a_crash_stop(tmp_path):
+    f = FakeEnv(tmp_path, scripts())
+
+    def boom(cmd):
+        raise RuntimeError("x")
+
+    env = replace(f.env(), sh=boom)
+    with pytest.raises(RuntimeError):
+        run(env)
+    assert read_ledger(f.runtime)[-1].reason == "crash"
+
+
+def test_a_park_decided_without_a_session_is_in_the_ledger(tmp_path):
+    _, f = full_item(tmp_path, spec_text=GOOD_SPEC.replace("## Calls made for the owner", "## Other"))
+    last = [e for e in read_ledger(f.runtime) if isinstance(e, StageEntry)][-1]
+    assert (last.stage, last.outcome, last.cost) == ("pr", "park", None)

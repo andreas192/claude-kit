@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import IO
 
 from kit.kitfile import LoopConfig
+from kit.loop.ledger import StageEntry, StopEntry, append_entry
 from kit.loop.pick import Pick, none_note
 from kit.loop.pick import pick as choose
 from kit.loop.prs import PR_FIELDS, Pr, loop_prs, park_body
@@ -31,7 +32,7 @@ from kit.loop.state import (
     unfinished,
     write_status,
 )
-from kit.loop.stream import StageResult, Usage, over_limit, parse_stream
+from kit.loop.stream import STAGE_MODELS, StageResult, Usage, over_limit, parse_stream
 from kit.roadmap import ROADMAP_PATH, Roadmap, RoadmapError, parse_roadmap
 
 PROMPTS = Path(__file__).with_name("prompts")
@@ -56,6 +57,7 @@ class Env:
     test_command: str
     repo_name: str
     weekend_ok: bool = False
+    kit_version: str = ""
 
 
 def _ticked(paths: tuple[str, ...]) -> str:
@@ -152,6 +154,19 @@ def _usage_text(usage: Usage | None) -> str:
 
 def _log_result(env: Env, what: str, r: StageResult) -> None:
     env.log(f"{what} {r.outcome} {r.detail} {_usage_text(r.usage)}".replace("  ", " "))
+
+
+def _stamp(env: Env) -> str:
+    return env.now().astimezone().isoformat(timespec="seconds")
+
+
+def _record_stage(env: Env, branch: str, stage: str, r: StageResult) -> None:
+    model = STAGE_MODELS[stage][0]
+    append_entry(env.runtime, StageEntry(_stamp(env), env.kit_version, branch, stage, model, r.outcome, r.cost))
+
+
+def _record_stop(env: Env, reason: str) -> None:
+    append_entry(env.runtime, StopEntry(_stamp(env), env.kit_version, reason))
 
 
 def _status_path(env: Env) -> Path:
@@ -359,9 +374,9 @@ class _Run:
         _log_result(env, f"{branch} {stage}", r)
         _push_if_ahead(env, branch)
         if r.outcome in ("ok", "more") and stage != "pr" and env.sh(["git", "rev-parse", "HEAD"]) == head:
-            return StageResult("error", "stage made no commit", r.usage)
+            return StageResult("error", "stage made no commit", r.usage, r.cost)
         if r.outcome == "ok" and stage == "pr" and not _ready_prs(env, branch):
-            return StageResult("error", "pr stage reported ok but no ready PR exists", r.usage)
+            return StageResult("error", "pr stage reported ok but no ready PR exists", r.usage, r.cost)
         return r
 
     def work(self, branch: str, status: Status | None, stage: str) -> str | None:
@@ -372,6 +387,7 @@ class _Run:
             if _on_weekend(self.env):
                 return "weekend"
             r = self.step(stage, branch, status)
+            _record_stage(self.env, branch, stage, r)
             self.usage = r.usage or self.usage
             if r.outcome == "usage":
                 return "usage"
@@ -394,6 +410,7 @@ class _Run:
 def _probe(env: Env) -> tuple[Usage | None, str]:
     r = parse_stream(env.claude("probe", render("probe", env)))
     _log_result(env, "probe", r)
+    _record_stage(env, "", "probe", r)
     if r.outcome == "usage":
         return r.usage, "limit"
     if r.outcome == "error" or r.usage is None:
@@ -405,6 +422,16 @@ def _probe(env: Env) -> tuple[Usage | None, str]:
 
 
 def run(env: Env) -> str:
+    """One loop run; its stop reason goes to the ledger, `crash` when it raised."""
+    reason = "crash"
+    try:
+        reason = _run_until_stop(env)
+        return reason
+    finally:
+        _record_stop(env, reason)
+
+
+def _run_until_stop(env: Env) -> str:
     if _on_weekend(env):
         return "weekend"
     usage, stop = _probe(env)

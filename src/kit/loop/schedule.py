@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -35,14 +36,14 @@ def _key(name: str, value: str) -> str:
     return f"<key>{escape(name)}</key>{value}"
 
 
-def _calendar_entries(hours: list[int]) -> str:
+def _calendar_entries(hours: list[int], weekdays: Iterable[int]) -> str:
     return "".join(
         "<dict>"
         f"<key>Weekday</key><integer>{weekday}</integer>"
         f"<key>Hour</key><integer>{hour}</integer>"
         "<key>Minute</key><integer>0</integer>"
         "</dict>"
-        for weekday in WEEKDAYS
+        for weekday in weekdays
         for hour in hours
     )
 
@@ -58,6 +59,7 @@ def plist_xml(
     workdir: Path,
     log: Path,
     hours: list[int],
+    weekdays: Iterable[int] = WEEKDAYS,
 ) -> str:
     args = "<array>" + "".join(_string(a) for a in program) + "</array>"
     body = "".join(
@@ -69,7 +71,7 @@ def plist_xml(
             _key("StandardOutPath", _string(str(log))),
             _key("StandardErrorPath", _string(str(log))),
             _key("RunAtLoad", "<false/>"),
-            _key("StartCalendarInterval", f"<array>{_calendar_entries(hours)}</array>"),
+            _key("StartCalendarInterval", f"<array>{_calendar_entries(hours, weekdays)}</array>"),
         ]
     )
     return f"{PLIST_HEADER}<dict>{body}</dict>\n</plist>\n"
