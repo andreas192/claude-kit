@@ -9,6 +9,7 @@ from kit.bench.run import default_control, run_bench
 from kit.detect import FLAGS, ask_with_default
 from kit.errors import KitError
 from kit.gitrun import run
+from kit.insights_cmd import insights_command
 from kit.loop.pick import pick
 from kit.loop_cmd import DEFAULT_AGENTS, fetch_prs, loop_command, remote_loop_branches
 from kit.migrate import load_known
@@ -22,6 +23,7 @@ PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 KIT_HOME = Path.home() / ".claude" / "kit"
 KIT_REPO = Path(__file__).parents[2]
 DEFAULT_BASE = Path.home() / "Projects" / "Personal"
+DEFAULT_WEEKS = 6
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,7 +50,27 @@ def build_parser() -> argparse.ArgumentParser:
     roadmap = subparsers.add_parser("roadmap", help="validate docs/roadmap.md and show what the loop would pick")
     roadmap.add_argument("repo", type=Path)
     add_loop_parser(subparsers)
+    add_insights_parser(subparsers)
     return parser
+
+
+def add_insights_parser(subparsers) -> None:
+    insights = subparsers.add_parser("insights", help="weekly report on loop and session cost, with findings and suggested changes")
+    actions = insights.add_subparsers(dest="insights_command", required=True)
+    for name in ("run", "install", "uninstall"):
+        action = actions.add_parser(name)
+        action.set_defaults(kit_repo=KIT_REPO)
+        action.add_argument("--kit-home", type=Path, default=KIT_HOME)
+        if name in ("run", "install"):
+            action.add_argument("--base", type=Path, default=DEFAULT_BASE)
+        if name in ("install", "uninstall"):
+            action.add_argument("--launch-agents", type=Path, default=DEFAULT_AGENTS)
+            action.add_argument("--no-launchctl", action="store_true")
+        if name == "run":
+            action.add_argument("--weeks", type=int, default=DEFAULT_WEEKS)
+            action.add_argument("--no-advise", action="store_true")
+            action.add_argument("--notify", action="store_true")
+            action.add_argument("--root", type=Path, default=PROJECTS_ROOT)
 
 
 def add_loop_parser(subparsers) -> None:
@@ -107,6 +129,7 @@ def roadmap_command(args: argparse.Namespace) -> int:
 COMMANDS = {
     "apply": apply_command,
     "bench": bench_command,
+    "insights": insights_command,
     "loop": loop_command,
     "roadmap": roadmap_command,
     "status": status_command,

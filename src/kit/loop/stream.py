@@ -28,11 +28,26 @@ class Usage:
     seven_day: float
 
 
+@dataclass(frozen=True)
+class StageCost:
+    """What one `claude -p` session cost, from its `result` event; numbers only."""
+
+    usd: float
+    fresh: int
+    write: int
+    read: int
+    output: int
+    duration_ms: int
+    turns: int
+    session_id: str
+
+
 @dataclass
 class StageResult:
     outcome: str
     detail: str
     usage: Usage | None
+    cost: StageCost | None = None
 
 
 def _loop_line(text: str) -> tuple[str, str]:
@@ -55,6 +70,23 @@ def _usage(info: dict) -> Usage | None:
     return Usage(float(five), float(seven))
 
 
+def _number(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def stage_cost(final: dict) -> StageCost | None:
+    """The cost fields of a `result` event; None when any is missing or not a number."""
+    usage = final.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    tokens = [usage.get(k) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "output_tokens")]
+    rest = [final.get(k) for k in ("total_cost_usd", "duration_ms", "num_turns")]
+    if not all(_number(v) for v in tokens + rest) or not isinstance(final.get("session_id"), str):
+        return None
+    fresh, write, read, output = (int(v) for v in tokens)
+    return StageCost(float(rest[0]), fresh, write, read, output, int(rest[1]), int(rest[2]), final["session_id"])
+
+
 def parse_stream(lines: Iterable[str]) -> StageResult:
     usage: Usage | None = None
     rejected = False
@@ -72,14 +104,15 @@ def parse_stream(lines: Iterable[str]) -> StageResult:
             usage = _usage(info)
         elif event.get("type") == "result":
             final = event
-    if rejected or (final and final.get("is_error") and final.get("api_error_status") == 429):
-        return StageResult("usage", "usage limit reached", usage)
     if final is None:
-        return StageResult("error", "no result line", usage)
+        return StageResult("usage" if rejected else "error", "usage limit reached" if rejected else "no result line", usage)
+    cost = stage_cost(final)
+    if rejected or (final.get("is_error") and final.get("api_error_status") == 429):
+        return StageResult("usage", "usage limit reached", usage, cost)
     if final.get("is_error"):
-        return StageResult("error", f"session failed: {str(final.get('result') or '')[:RESULT_MAX]}", usage)
+        return StageResult("error", f"session failed: {str(final.get('result') or '')[:RESULT_MAX]}", usage, cost)
     outcome, detail = _loop_line(final.get("result") or "")
-    return StageResult(outcome, detail, usage)
+    return StageResult(outcome, detail, usage, cost)
 
 
 def over_limit(usage: Usage | None) -> bool:

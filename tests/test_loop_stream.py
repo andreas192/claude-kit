@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from kit.loop.stream import STAGE_MODELS, Usage, claude_command, over_limit, parse_stream, stream_lines
+from kit.loop.stream import STAGE_MODELS, StageCost, Usage, claude_command, over_limit, parse_stream, stream_lines
 
 
 def rate(five: float, seven: float = 0.1, status: str = "allowed") -> str:
@@ -94,3 +94,31 @@ def test_command_carries_the_prompt_the_model_and_the_settings_file():
     assert cmd[:5] == ["claude", "-p", "the prompt", "--model", "opus"]
     assert cmd[-2:] == ["--settings", "/r/settings.json"]
     assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
+
+
+def costed(text: str = "LOOP: ok", **over) -> str:
+    event = {
+        "type": "result", "is_error": False, "api_error_status": None, "result": text,
+        "total_cost_usd": 1.5, "duration_ms": 60_000, "num_turns": 12, "session_id": "sid-1",
+        "usage": {"input_tokens": 10, "cache_creation_input_tokens": 2000, "cache_read_input_tokens": 50_000, "output_tokens": 300},
+    }
+    return json.dumps({**event, **over})
+
+
+def test_parse_reads_the_stage_cost():
+    assert parse_stream([costed()]).cost == StageCost(1.5, 10, 2000, 50_000, 300, 60_000, 12, "sid-1")
+
+
+def test_parse_keeps_the_cost_of_a_failed_or_limited_session():
+    assert parse_stream([costed("boom", is_error=True, api_error_status=500)]).cost is not None
+    assert parse_stream([rate(1.0, status="rejected"), costed()]).cost is not None
+
+
+@pytest.mark.parametrize("over", [{"usage": None}, {"total_cost_usd": "1"}, {"num_turns": True}, {"session_id": 3}, {"usage": {"input_tokens": 1}}])
+def test_parse_bad_cost_fields_give_no_cost(over):
+    r = parse_stream([costed(**over)])
+    assert (r.outcome, r.cost) == ("ok", None)
+
+
+def test_parse_no_result_line_has_no_cost():
+    assert parse_stream([rate(0.2)]).cost is None

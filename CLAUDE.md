@@ -10,12 +10,13 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
 - Plan index: `docs/superpowers/plans/2026-10-18-claude-kit.md`
 - Spec: `docs/superpowers/specs/2026-10-24-roadmap-and-loop-design.md`
 - Plan: `docs/superpowers/plans/2026-10-24-roadmap-and-loop.md`
+- Spec: `docs/superpowers/specs/2026-10-25-insights-design.md`
 
 ## Global Constraints
 
 - No `pip install`, `uv tool install`, `uvx` or `uv pip install --system`. The kit runs as `uv run --project <kit> kit ...` from its own `.venv`. No Homebrew, shell-profile or `podman machine` changes.
-- `apply` writes only inside the target repo and inside `~/.claude/kit/`. It never merges a PR. `bench` writes only `.claude/kit-bench/` in the target repo.
-- `bench` prints counts and ratios only, never message text.
+- `apply` writes only inside the target repo and inside `~/.claude/kit/`. It never merges a PR. `bench` writes only `.claude/kit-bench/` in the target repo. `insights` writes only `~/.claude/kit/insights/` and reads ledgers, transcripts and git history.
+- `bench` and `insights` print counts and ratios only, never message text. The insights advisor sees only that report and the kit's own files.
 - Tests run offline with fixtures built in code; `git` runs on temp repos; `gh` and `node` hook runs go through injected runners or real `node` (skip if missing). Never read the real `~/.claude/projects/` in tests.
 - Follow `docs/code-conventions.md` (copied from dividend-growth in task 1): minimal functions, typed named results, typed errors (`KitError`), UNIT tests beside each module, PIPELINE tests only in `tests/test_cli_pipeline.py`. `cli.py`, `apply.py` and `bench/run.py` are wiring.
 - Plugin name `kit`; marketplace name `kit-v<major>-<minor>-<patch>`; agents `kit:implementer-haiku`, `kit:implementer-sonnet`, `kit:reviewer-sonnet`.

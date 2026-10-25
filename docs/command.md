@@ -19,6 +19,8 @@ uv run --project ~/Projects/Personal/claude-kit kit loop install <repo> [--launc
 uv run --project ~/Projects/Personal/claude-kit kit loop uninstall <repo> [--launch-agents DIR] [--no-launchctl] [--kit-home DIR]
 uv run --project ~/Projects/Personal/claude-kit kit loop status <repo> [--no-launchctl] [--kit-home DIR]
 uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key> [--kit-home DIR]
+uv run --project ~/Projects/Personal/claude-kit kit insights run [--base DIR] [--weeks 6] [--no-advise] [--notify] [--kit-home DIR] [--root DIR]
+uv run --project ~/Projects/Personal/claude-kit kit insights install|uninstall [--base DIR] [--launch-agents DIR] [--no-launchctl] [--kit-home DIR]
 ```
 
 To apply a pinned version to `investment` or `dividend-growth` from an up-to-date `develop`, then bench it against the other repo:
@@ -62,6 +64,17 @@ A spec question the loop cannot answer parks the item as a draft PR; `resume` le
 2. Run `uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key>`. It sets the branch's status back to stage `spec`, commits and pushes. The next weekday run finishes the spec and carries on.
 
 `kit loop resume` refuses while a run holds the lock.
+
+## Insights
+
+`kit insights run` writes `~/.claude/kit/insights/<YYYY>-W<ww>.md` (named for the last complete ISO week) and prints it. For each kit repo under `--base` it shows:
+
+- **Loop by week / by kit version**: runs, stage sessions, shipped, parked, build sessions per shipped item, errors, stops on usage, $ per stage, $ per shipped item, the spec + plan share of $, and median stage peak context. All of it comes from `stages.jsonl`, so loop numbers start with the first run on a version that writes it.
+- **Sessions by week / by kit version**: bench's B/F/S/Q4 rows over interactive sessions, with the loop's own sessions left out.
+- **Findings**: L1-L7 (loop) and S1-S6 (sessions) rules on the latest week, each with its numbers and one suggested change. Thresholds are in `src/kit/insights/findings.py`.
+- **Suggested changes**: a read-only Sonnet session (Read/Grep/Glob, cwd the kit repo) reads the report and the kit's prompts, agents, hooks and token rules, and proposes up to 8 changes. Each cites a number. It costs about $0.20; `--no-advise` skips it.
+
+`kit insights install` writes `~/Library/LaunchAgents/com.kit.insights.plist`. It runs the kit checkout (not a snapshot) on Mondays at 09:00 with `--notify`, and logs to `~/.claude/kit/insights/launchd.log`.
 
 ## Release
 
