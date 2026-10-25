@@ -24,6 +24,18 @@ def test_default_branch_falls_back_to_main(repo):
     assert default_branch(repo, run) == "main"
 
 
+def test_default_branch_without_origin_head_but_with_origin_names_the_fix(repo):
+    git(repo, "remote", "add", "origin", "https://example.invalid/x.git")
+    with pytest.raises(KitError, match="remote set-head origin --auto"):
+        default_branch(repo, run)
+
+
+def test_history_raises_when_origin_head_is_missing(repo):
+    git(repo, "remote", "add", "origin", "https://example.invalid/x.git")
+    with pytest.raises(KitError, match="origin/HEAD"):
+        history(repo, run)
+
+
 def test_default_branch_reads_origin_head():
     assert default_branch(Path("."), lambda cmd, cwd: "origin/develop\n") == "develop"
 

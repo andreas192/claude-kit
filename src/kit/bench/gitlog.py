@@ -28,10 +28,20 @@ def parse_time(text: str) -> datetime:
     return datetime.fromisoformat(text.replace("Z", "+00:00"))
 
 
+def has_origin(repo: Path, run: Runner) -> bool:
+    try:
+        return bool(run(["git", "config", "--get", "remote.origin.url"], repo).strip())
+    except KitError:
+        return False
+
+
 def default_branch(repo: Path, run: Runner) -> str:
+    """origin/HEAD's branch; `main` only for a repo without origin, as guessing a remote repo's branch reads the wrong history."""
     try:
         ref = run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"], repo).strip()
     except KitError:
+        if has_origin(repo, run):
+            raise KitError(f"origin/HEAD is not set in {repo}; run: git -C {repo} remote set-head origin --auto") from None
         return FALLBACK_BRANCH
     return ref.removeprefix(ORIGIN) or FALLBACK_BRANCH
 
@@ -74,7 +84,8 @@ def merged_at(repo: Path, version: str, branch: str, run: Runner) -> str | None:
 
 def history(repo: Path, run: Runner) -> list[Merge]:
     """The default branch's merges with an empty list for a directory that is not a git repo with commits."""
+    branch = default_branch(repo, run)
     try:
-        return merges(repo, default_branch(repo, run), run)
+        return merges(repo, branch, run)
     except KitError:
         return []

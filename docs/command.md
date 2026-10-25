@@ -21,6 +21,14 @@ uv run --project ~/Projects/Personal/claude-kit kit loop status <repo> [--no-lau
 uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key> [--kit-home DIR]
 ```
 
+To apply a pinned version to `investment` or `dividend-growth` from an up-to-date `develop`, then bench it against the other repo:
+
+```sh
+scripts/apply-kit.sh <investment|dividend-growth> [vX.Y.Z] [--no-pr]   # version defaults to v0.2.0
+```
+
+It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<version>` branch.
+
 - `apply --launch-agents DIR`: where the loop's launchd plist goes when the repo has one (default `~/Library/LaunchAgents`).
 - `roadmap <repo>`: read-only. Exits 1 with each error's line number when `docs/roadmap.md` does not validate.
 - `loop run`: one loop run in the foreground. `--pick-only` prints the pick and stops. `--weekend-ok` lets it run on Saturday or Sunday.
