@@ -213,6 +213,7 @@ class FakeEnv:
             log=self.logs.append,
             worktree=self.worktree,
             runtime=self.runtime,
+            scratch=self.runtime / "scratch",
             today=self.today,
             now=self.clock,
             weekend_ok=self.weekend_ok,
@@ -772,10 +773,10 @@ def test_pr_prompt_numbers_the_checklist_between_the_test_run_and_the_create(tmp
     assert "2. " in plain and "\n\n\n" not in plain
 
 
-def test_pr_prompt_writes_the_body_to_the_runtime_and_ends_it_with_the_attribution(tmp_path):
+def test_pr_prompt_writes_the_body_to_the_scratch_dir_and_ends_it_with_the_attribution(tmp_path):
     env = env_with(LoopConfig("develop"), tmp_path / "rt")
     text = render("pr", env, row="R", key="r", branch="loop/r", spec="s", plan="p")
-    assert text.count(f"{tmp_path}/rt/pr-body.md") == 3 and "--body-file" in text
+    assert text.count(f"{tmp_path}/rt/scratch/pr-body.md") == 3 and "/tmp`" not in text and "--body-file" in text
     assert "the user's view" in text and "investor" not in text and ATTRIBUTION in text
 
 
@@ -879,3 +880,15 @@ def test_a_park_decided_without_a_session_is_in_the_ledger(tmp_path):
     _, f = full_item(tmp_path, spec_text=GOOD_SPEC.replace("## Calls made for the owner", "## Other"))
     last = [e for e in read_ledger(f.runtime) if isinstance(e, StageEntry)][-1]
     assert (last.stage, last.outcome, last.cost) == ("pr", "park", None)
+
+
+def test_pr_body_goes_to_the_scratch_dir_not_the_runtime_dir():
+    text = render("pr", env_with(LoopConfig("main")), row="R", key="r", branch="loop/r", spec="s", plan="p")
+    assert "--body-file /runtime/scratch/pr-body.md" in text
+    assert "/runtime/pr-body.md" not in text
+
+
+def test_every_working_stage_says_one_bash_command_per_call_and_edit_files_with_edit():
+    for stage in ("spec", "plan", "build", "pr"):
+        text = render(stage, env_with(LoopConfig("main")))
+        assert "one Bash command per call" in text and "`sed`" in text and "never `git -C`" in text

@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,11 @@ Which = Callable[[str], str | None]
 
 def runtime_dir(kit_home: Path, repo: Path) -> Path:
     return kit_home / "loop" / repo.name
+
+
+def scratch_dir(repo: Path, root: Path | None = None) -> Path:
+    """Where loop sessions write files such as the PR body: `~/.claude` is protected in don't-ask mode, so not the runtime dir."""
+    return (root or Path(tempfile.gettempdir())).resolve() / "kit-loop" / repo.name
 
 
 def require_loop(kit: KitFile | None, repo: Path) -> LoopConfig:
@@ -134,9 +140,10 @@ def read_extra(repo: Path) -> dict:
         raise KitError(f"{path} is not valid JSON: {error}") from error
 
 
-def write_settings(repo: Path, runtime: Path, config: LoopConfig, test_command: str) -> Path:
-    settings = loop_settings(base_settings(), read_extra(repo), repo, config.forbidden_paths, test_command, runtime.resolve())
+def write_settings(repo: Path, runtime: Path, scratch: Path, config: LoopConfig, test_command: str) -> Path:
+    settings = loop_settings(base_settings(), read_extra(repo), repo, config.forbidden_paths, test_command, scratch.resolve())
     runtime.mkdir(parents=True, exist_ok=True)
+    scratch.mkdir(parents=True, exist_ok=True)
     path = runtime / "settings.json"
     path.write_text(json.dumps(settings, indent=2) + "\n")
     return path
@@ -181,7 +188,8 @@ def file_log(runtime: Path) -> Callable[[str], None]:
 
 def real_env(repo: Path, runtime: Path, config: LoopConfig, test_command: str, weekend_ok: bool) -> driver.Env:
     worktree = repo / WORKTREE
-    settings = write_settings(repo, runtime, config, test_command)
+    scratch = scratch_dir(repo)
+    settings = write_settings(repo, runtime, scratch, config, test_command)
     return driver.Env(
         claude=_claude_in(worktree, settings),
         sh=_git_in(worktree),
@@ -189,6 +197,7 @@ def real_env(repo: Path, runtime: Path, config: LoopConfig, test_command: str, w
         log=file_log(runtime),
         worktree=worktree,
         runtime=runtime,
+        scratch=scratch,
         today=datetime.now().strftime("%Y-%m-%d"),
         now=datetime.now,
         config=config,

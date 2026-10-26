@@ -22,7 +22,7 @@ def test_repo_extras_are_unioned_without_duplicates(tmp_path):
     assert allow.count("Read") == 1
     assert "Bash(uv run dgi *)" in allow
     assert "Bash(uv run pytest -q*)" in allow
-    assert f"Write(/{tmp_path / 'rt'}/**)" in allow
+    assert f"Edit(/{tmp_path / 'rt'}/**)" in allow
     assert deny.count("Bash(gh api*)") == 1
     assert "env" not in s
 
@@ -47,3 +47,9 @@ def test_extra_rules_with_parent_paths_are_pinned_to_the_repo_not_the_worktree(t
     assert "Read(../investment/data/**)" not in deny
     assert f"Read(/{tmp_path.resolve()}/shared/**)" in allow
     assert "Edit(./**)" in allow and "Write(src/**)" in deny and "Bash(rm -rf ../x)" in deny
+
+
+def test_the_scratch_dir_is_allowed_by_an_edit_rule_because_write_rules_grant_nothing_outside_the_checkout(tmp_path):
+    allow = loop_settings(base_settings(), {}, tmp_path, (), "uv run pytest -q", tmp_path / "scratch")["permissions"]["allow"]
+    assert f"Edit(/{tmp_path / 'scratch'}/**)" in allow
+    assert f"Write(/{tmp_path / 'scratch'}/**)" not in allow

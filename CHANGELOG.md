@@ -7,6 +7,11 @@ Weekly insights.
 - The loop driver appends each stage session (cost $, tokens, duration, turns, outcome, model, kit version, session id) and each run's stop reason to `~/.claude/kit/loop/<repo>/stages.jsonl`.
 - `kit insights run|install|uninstall`: a weekly report in `~/.claude/kit/insights/<YYYY>-W<ww>.md` for every kit repo under `--base`. It holds the loop's numbers by week and by kit version, and session benchmarks by week and by kit version, with loop sessions left out. Fixed-rule findings follow, then the suggested changes of a read-only Sonnet advisor (`--no-advise` skips it). `install` runs it from launchd on Mondays at 09:00 and shows a notification.
 
+Loop permission fixes.
+
+- The PR stage writes its body to `<temp dir>/kit-loop/<repo>/pr-body.md`, allowed by an `Edit(//…)` rule. Before, it wrote to `~/.claude/kit/loop/<repo>/` under a `Write(//…)` rule, which don't-ask mode denies twice over (`~/.claude` is protected, and `Write` rules grant nothing outside the checkout), so every PR stage parked.
+- Every stage prompt now says one Bash command per call, no `cat`/`sed`/`printf`, no `git -C`, with Read and Edit for files. Build sessions had parked when a chained `sed … && git commit` was denied.
+
 ## v0.2.0 — 2026-10-24
 
 Roadmap and feature loop.

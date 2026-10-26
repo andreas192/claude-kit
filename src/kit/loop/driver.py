@@ -51,6 +51,7 @@ class Env:
     log: Callable[[str], None]
     worktree: Path
     runtime: Path
+    scratch: Path
     today: str
     now: Callable[[], datetime]
     config: LoopConfig
@@ -67,7 +68,12 @@ def _ticked(paths: tuple[str, ...]) -> str:
 
 def _rules(config: LoopConfig) -> str:
     never_write = f"never write {_ticked(config.forbidden_paths)}; " if config.forbidden_paths else ""
-    return f"{never_write}never merge or force-push; every commit message ends with the line `{CO_AUTHOR}`"
+    one_command = (
+        "one Bash command per call, never `&&`, `;`, a pipe or a heredoc, never `cat`, `sed` or `printf` "
+        "(read with Read, change files with Edit), never `git -C` (git runs in this checkout), "
+        "because in don't-ask mode every part of a compound command must be allowed"
+    )
+    return f"{never_write}never merge or force-push; every commit message ends with the line `{CO_AUTHOR}`; {one_command}"
 
 
 def _read_first(config: LoopConfig) -> str:
@@ -88,7 +94,7 @@ def _config_fields(env: Env) -> dict[str, str]:
         "pr_checklist": _checklist(env.config),
         "n_create": str(steps + 2),
         "n_roadmap": str(steps + 3),
-        "pr_body": str(env.runtime / "pr-body.md"),
+        "pr_body": str(env.scratch / "pr-body.md"),
     }
 
 
