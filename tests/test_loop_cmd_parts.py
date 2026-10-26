@@ -27,6 +27,7 @@ from kit.loop_cmd import (
     require_loop,
     resume,
     runtime_dir,
+    scratch_dir,
     status_lines,
     uninstall,
     write_settings,
@@ -75,7 +76,7 @@ def env_for(tmp_path: Path, repo: Path) -> Env:
     logs: list[str] = []
     return Env(
         claude=lambda stage, text: [], sh=sh_in(worktree), notify=logs.append, log=logs.append, worktree=worktree,
-        runtime=tmp_path / "runtime", today="2026-10-20", now=lambda: datetime(2026, 10, 21, 10),
+        runtime=tmp_path / "runtime", scratch=tmp_path / "scratch", today="2026-10-20", now=lambda: datetime(2026, 10, 21, 10),
         config=LoopConfig("main"), test_command="pytest", repo_name="repo",
     )
 
@@ -387,16 +388,24 @@ def test_read_extra_names_a_file_that_is_not_json(tmp_path):
         read_extra(tmp_path)
 
 
-def test_write_settings_merges_extra_forbidden_paths_and_the_runtime(tmp_path):
-    repo, runtime = tmp_path / "repo", tmp_path / "home" / "loop" / "repo"
+def test_write_settings_merges_extra_forbidden_paths_and_the_scratch_dir(tmp_path):
+    repo, runtime, scratch = tmp_path / "repo", tmp_path / "home" / "loop" / "repo", tmp_path / "tmp" / "kit-loop" / "repo"
     (repo / ".claude").mkdir(parents=True)
     (repo / ".claude" / "loop-settings.json").write_text('{"permissions": {"allow": ["Bash(uv run dgi *)"]}}')
-    path = write_settings(repo, runtime, LoopConfig("main", forbidden_paths=("../investment",)), "uv run pytest -q")
+    path = write_settings(repo, runtime, scratch, LoopConfig("main", forbidden_paths=("../investment",)), "uv run pytest -q")
     permissions = json.loads(path.read_text())["permissions"]
-    assert path == runtime / "settings.json"
+    assert path == runtime / "settings.json" and scratch.is_dir()
     assert "Bash(uv run dgi *)" in permissions["allow"] and "Bash(uv run pytest -q*)" in permissions["allow"]
-    assert f"Write(/{runtime.resolve()}/**)" in permissions["allow"]
+    assert f"Edit(/{scratch.resolve()}/**)" in permissions["allow"]
     assert f"Edit(/{(repo / '../investment').resolve()}/**)" in permissions["deny"]
+
+
+def test_scratch_dir_is_per_repo_resolved_and_outside_the_protected_claude_dir(tmp_path):
+    (tmp_path / "real").mkdir()
+    (tmp_path / "link").symlink_to(tmp_path / "real")
+    scratch = scratch_dir(tmp_path / "work" / "demo", tmp_path / "link")
+    assert scratch == (tmp_path / "real").resolve() / "kit-loop" / "demo"
+    assert ".claude" not in scratch_dir(Path("/r/demo")).parts
 
 
 def test_uninstall_boots_out_its_own_label_and_removes_the_plist(tmp_path):

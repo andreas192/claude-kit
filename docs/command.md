@@ -52,7 +52,8 @@ Runtime files live in `~/.claude/kit/loop/<repo-name>/`, never in the repo:
 - `settings.json`: the permissions for `claude -p`, regenerated on each run from the kit's base settings, the repo's `.claude/loop-settings.json` and `forbidden_paths`.
 - `note.md`: the note written when no roadmap item is left.
 - `note-body.md`: the note as last posted, as a comment on the newest loop PR.
-- `pr-body.md`: the PR body the loop writes for its PR.
+
+The PR stage session writes its PR body to `pr-body.md` in `<temp dir>/kit-loop/<repo-name>/`, not in the runtime dir: `~/.claude/` is protected in don't-ask mode, and a file outside the checkout is writable only through an `Edit(//<abs path>/**)` rule (a `Write(...)` rule there grants nothing).
 
 The scheduled agent runs on weekdays only, from the applied version's snapshot (`PYTHONPATH=~/.claude/kit/<version>/src`). A foreground `uv run --project <kit> kit loop run <repo>` runs the kit checkout's own code, unless a newer applied snapshot exists, in which case it hands over to that snapshot. To start a run by hand on a weekend, add `--weekend-ok`.
 

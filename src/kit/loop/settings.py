@@ -46,7 +46,7 @@ def loop_settings(
     repo: Path,
     forbidden: tuple[str, ...],
     test_command: str,
-    runtime: Path,
+    scratch: Path,
 ) -> dict:
     base_perms = base["permissions"]
     extra_perms = extra.get("permissions", {})
@@ -54,7 +54,8 @@ def loop_settings(
         *base_perms["allow"],
         *(_pinned(rule, repo) for rule in extra_perms.get("allow", [])),
         f"Bash({test_command}*)",
-        _absolute_rule("Write", runtime),
+        # Write outside the checkout is granted only by Edit rules; Write rules there match nothing.
+        _absolute_rule("Edit", scratch),
     ]
     deny = [
         *base_perms["deny"],
