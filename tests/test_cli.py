@@ -5,7 +5,7 @@ from kit.errors import KitError
 
 def test_version_prints_package_version(capsys):
     assert main(["--version"]) == 0
-    assert capsys.readouterr().out.strip() == "kit 0.2.0"
+    assert capsys.readouterr().out.strip() == "kit 0.3.0"
 
 
 def test_kit_error_becomes_exit_1(capsys, monkeypatch):

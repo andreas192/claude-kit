@@ -376,12 +376,12 @@ def test_loop_run_hands_over_to_the_newer_snapshot_with_its_src_on_the_path(tmp_
     repo, kit_home = loop_repo
     marker = tmp_path / "handed-over"
     stub = f"import sys\nopen({str(marker)!r}, 'w').write(' '.join(sys.argv[1:]))\nsys.exit(7)\n"
-    src = kit_home / "v0.3.0" / "src" / "kit"
+    src = kit_home / "v99.0.0" / "src" / "kit"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("")
     (src / "cli.py").write_text(stub)
-    write_kitfile(repo, KitFile("pytest", (Apply("v0.2.0", "a", APPLIED), Apply("v0.3.0", "b", APPLIED)), LoopConfig("main")))
-    commit(repo, {}, "apply v0.3.0", "2026-10-21T10:00:00Z")
+    write_kitfile(repo, KitFile("pytest", (Apply("v0.2.0", "a", APPLIED), Apply("v99.0.0", "b", APPLIED)), LoopConfig("main")))
+    commit(repo, {}, "apply v99.0.0", "2026-10-21T10:00:00Z")
     git(repo, "push")
     fake_bin(tmp_path, monkeypatch, {"gh": "echo '[]'"})
     assert main(["loop", "run", str(repo), "--weekend-ok", "--kit-home", str(kit_home)]) == 7
