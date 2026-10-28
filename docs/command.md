@@ -79,5 +79,7 @@ A spec question the loop cannot answer parks the item as a draft PR; `resume` le
 
 ## Release
 
+The full checklist is the project skill `releasing-claude-kit` (`.claude/skills/releasing-claude-kit/SKILL.md`).
+
 1. Bump the version in `plugin/.claude-plugin/plugin.json`, `pyproject.toml` and `src/kit/__init__.py`. Then run `uv lock` to refresh `uv.lock`.
 2. Commit, then `git tag vX.Y.Z`.
