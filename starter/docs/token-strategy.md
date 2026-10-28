@@ -49,7 +49,7 @@ Cached input costs about a tenth of fresh input, so a warm session is cheap per 
 ## Checkpoints
 
 - Run `/context` at the start of a new kind of task. If CLAUDE.md plus imports exceeds ~3k tokens, trim it.
-- Hand off by file and `/clear` when the conversation passes ~80k tokens, whatever the turn count. The kit's `context-warn` hook fires once per 80k step: on Stop it tells the owner; on the next prompt it tells Claude to write the handoff into the plan or spec and end its reply with `Handoff: <file>` and `After /clear, paste: continue from <file>, next: <step>`. Claude cannot `/clear` itself; the owner pastes that line after `/clear`. In plan execution the orchestrator hands off between batches: the plan file records which tasks are done.
+- Hand off by file and `/clear` when the conversation passes ~60k tokens, whatever the turn count. The kit's `context-warn` hook fires once per 60k step: on Stop it tells the owner; on the next prompt it tells Claude to write the handoff into the plan or spec and end its reply with `Handoff: <file>` and `After /clear, paste: continue from <file>, next: <step>`. Claude cannot `/clear` itself; the owner pastes that line after `/clear`. In plan execution the orchestrator hands off between batches: the plan file records which tasks are done.
 - Once per plan phase, note `/cost` (or `/usage`) at the end. Before changing these rules, compare a phase run both ways rather than guessing.
 - Planned checks over session transcripts, with a 2026-10-16 baseline: `docs/superpowers/specs/2026-10-16-token-usage-roadmap.md`.
 

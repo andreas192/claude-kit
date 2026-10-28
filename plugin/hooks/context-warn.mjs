@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Stop and UserPromptSubmit hook. Enforces the checkpoint
-// ("hand off by file and /clear past ~80k"; docs/token-strategy.md if the repo has one): reads the session transcript, takes
-// the context of the last main-window call, and warns once per 80k step
-// (80k, 160k, ...) per event. Stop tells the owner; UserPromptSubmit tells Claude
+// ("hand off by file and /clear past ~60k"; docs/token-strategy.md if the repo has one): reads the session transcript, takes
+// the context of the last main-window call, and warns once per 60k step
+// (60k, 120k, ...) per event. Stop tells the owner; UserPromptSubmit tells Claude
 // to write the handoff and end its reply with the line to paste after /clear.
 // Read-only on the transcript; the only state is a small file per session and
 // event in the OS temp dir.
@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const DEFAULT_STEP = 80000;
+const DEFAULT_STEP = 60000;
 const STEP = Number(process.env.KIT_CONTEXT_WARN_STEP ?? DEFAULT_STEP);
 const STRATEGY_DOC = "docs/token-strategy.md";
 
