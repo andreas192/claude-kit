@@ -26,7 +26,7 @@ uv run --project ~/Projects/Personal/claude-kit kit insights install|uninstall [
 To apply a pinned version to `investment` or `dividend-growth` from an up-to-date `develop`, then bench it against the other repo:
 
 ```sh
-scripts/apply-kit.sh <investment|dividend-growth> [vX.Y.Z] [--no-pr]   # version defaults to v0.2.0
+scripts/apply-kit.sh <investment|dividend-growth> [vX.Y.Z] [--no-pr]   # version defaults to v0.3.1
 ```
 
 It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<version>` branch.

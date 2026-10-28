@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.1 — 2026-10-28
+
+- `scripts/apply-kit.sh` defaults to the current version again. v0.3.0 left its default, and the note in `docs/command.md`, at v0.2.0.
+- The release checklist is now the project skill `releasing-claude-kit`, linked from `docs/command.md`.
+
 ## v0.3.0 — 2026-10-26
 
 Weekly insights.

@@ -8,7 +8,7 @@ BASE="$HOME/Projects/Personal"
 BASE_BRANCH=develop
 
 name=${1:?usage: apply-kit.sh <investment|dividend-growth> [vX.Y.Z] [--no-pr]}
-version=${2:-v0.2.0}
+version=${2:-v0.3.1}
 pr_flag=${3:-}
 
 case "$name" in
