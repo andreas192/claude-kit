@@ -192,6 +192,10 @@ def commits(repo: Path) -> int:
 
 @needs_node
 def test_apply_puts_the_version_into_the_repo_on_a_branch(tmp_path, target, kit_repo):
+    kit_path = target / ".claude/kit.json"
+    kit_path.write_text(json.dumps({"test_command": "true", "applies": [], "requests": {"targets": ["../investment"]}}, indent=2) + "\n")
+    git(target, "add", "-A")
+    git(target, "commit", "-m", "requests section")
     argv = apply_args(tmp_path, target)
     before = commits(target)
     assert main(argv) == 0
@@ -202,6 +206,7 @@ def test_apply_puts_the_version_into_the_repo_on_a_branch(tmp_path, target, kit_
     assert "kit@kit-v0-1-0" in settings["enabledPlugins"]
     assert "test-layer-guard.mjs" not in json.dumps(settings.get("hooks", {})) and "context-warn.mjs" not in json.dumps(settings.get("hooks", {}))
     assert json.loads((target / ".claude/kit.json").read_text())["test_command"] == "true"
+    assert json.loads((target / ".claude/kit.json").read_text())["requests"] == {"targets": ["../investment"]}
     assert not any((target / name).exists() for name in LOCAL_HOOKS)
     assert (target / ".claude/kit-bench/baseline.json").is_file()
     assert (target / "docs/token-strategy.md").is_file() and (target / ".claude/test-layers.json").is_file()

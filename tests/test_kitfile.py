@@ -5,7 +5,7 @@ import json
 import pytest
 
 from kit.errors import KitError
-from kit.kitfile import Apply, KitFile, LoopConfig, parse_kitfile, read_kitfile, with_apply, write_kitfile
+from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, parse_kitfile, read_kitfile, with_apply, write_kitfile
 
 
 def test_with_apply_appends_and_refuses_the_same_version():
@@ -81,3 +81,31 @@ def test_bad_loop_section_is_a_kit_error(tmp_path, loop):
     (tmp_path / ".claude/kit.json").write_text(json.dumps({"test_command": "t", "applies": [], "loop": loop}))
     with pytest.raises(KitError, match="invalid kit.json"):
         read_kitfile(tmp_path)
+
+
+REQUESTS_BASE = '{"test_command": "t", "applies": []'
+
+
+def test_requests_section_is_parsed():
+    kit = parse_kitfile(REQUESTS_BASE + ', "requests": {"targets": ["../investment"]}}')
+    assert kit.requests == RequestsConfig(("../investment",))
+
+
+def test_no_requests_section_is_none():
+    assert parse_kitfile(REQUESTS_BASE + "}").requests is None
+
+
+@pytest.mark.parametrize("raw, message", [
+    ('"x"', "requests must be an object"),
+    ('{"targets": "../a"}', "requests.targets must be a list of strings"),
+    ('{"targets": [], "other": 1}', "requests has unknown key 'other'"),
+])
+def test_bad_requests_section(raw, message):
+    with pytest.raises(KitError, match=message):
+        parse_kitfile(REQUESTS_BASE + f', "requests": {raw}}}')
+
+
+def test_requests_survive_write_and_with_apply(tmp_path):
+    kit = KitFile("t", (), None, RequestsConfig(("../investment",)))
+    write_kitfile(tmp_path, with_apply(kit, Apply("v0.4.0", "c", "d")))
+    assert read_kitfile(tmp_path).requests == RequestsConfig(("../investment",))

@@ -82,7 +82,7 @@ def apply(
         require_passing(checks, branch)
     commit = gitops.commit_all(repo, f"chore: apply claude-kit {version}", run)
     recorded = Apply(version, commit, gitops.commit_time(repo, commit, run), migration.overrides)
-    write_kitfile(repo, with_apply(KitFile(resolved.test_command, kit.applies, kit.loop), recorded))
+    write_kitfile(repo, with_apply(KitFile(resolved.test_command, kit.applies, kit.loop, kit.requests), recorded))
     gitops.commit_all(repo, f"chore: record claude-kit {version}", run)
 
     had_loop = OLD_LOOP_SCRIPT in (*migration.remove, *migration.overrides)
