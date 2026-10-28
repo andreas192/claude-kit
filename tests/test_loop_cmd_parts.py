@@ -10,7 +10,7 @@ from builders import GOOD, add_loop_package, commit, git, init_origin, tag
 
 from kit.errors import KitError
 from kit.gitrun import run
-from kit.kitfile import Apply, KitFile, LoopConfig, write_kitfile
+from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, write_kitfile
 from kit.loop.driver import Env
 from kit.loop.state import Status, write_status
 from kit.loop_cmd import (
@@ -23,6 +23,7 @@ from kit.loop_cmd import (
     program,
     read_extra,
     remote_loop_branches,
+    request_hooks,
     require_loop,
     resume,
     runtime_dir,
@@ -394,3 +395,21 @@ def test_status_lines_say_when_the_agent_is_not_loaded_and_there_is_no_log(tmp_p
 
     lines = status_lines(tmp_path / "demo", tmp_path, not_loaded)
     assert lines[0].startswith("launchd: com.kit.loop.demo not loaded") and lines[1] == "no loop.log yet"
+
+
+def test_request_hooks_are_empty_without_requests_targets(tmp_path):
+    for requests in (None, RequestsConfig(())):
+        hooks = request_hooks(tmp_path / "dg", requests, tmp_path / "kit", run)
+        assert hooks.targets == () and hooks.file_request is None
+
+
+def test_request_hooks_name_the_targets_and_file_through_file_request_file(tmp_path):
+    repo = tmp_path / "dividend-growth"
+    repo.mkdir()
+    hooks = request_hooks(repo, RequestsConfig(("../investment",)), tmp_path / "kit", run)
+    assert hooks.targets == ("investment",)
+    request = tmp_path / "a.md"
+    request.write_text("Target: elsewhere\n### Fix\n")
+    record = hooks.file_request(request, "loop/row-a")
+    assert (record.target, record.title, record.url) == ("elsewhere", "Fix", "")
+    assert "'elsewhere' is not in requests.targets" in record.error

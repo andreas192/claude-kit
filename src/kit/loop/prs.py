@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
+
+from kit.loop.requests import REQUESTS_HEADING
 
 PR_FIELDS = "number,headRefName,state,createdAt,url,title,isDraft,body"
 LOOP_PREFIX = "loop/"
@@ -41,11 +44,13 @@ def loop_prs(gh_json: str) -> list[Pr]:
     return sorted(prs, key=lambda p: p.created)
 
 
-def park_body(reason: str, spec: str, plan: str, questions: list[str]) -> str:
+def park_body(reason: str, spec: str, plan: str, questions: list[str], requests: Sequence[str] = ()) -> str:
     parts = [PARKED + reason]
     refs = [label + path for label, path in ((SPEC, spec), (PLAN, plan)) if path]
     if refs:
         parts.append("\n".join(refs))
+    if requests:
+        parts.append("\n".join([REQUESTS_HEADING, "", *requests]))
     if questions:
         parts.append("\n".join([QUESTIONS_HEADING, "", *(f"- {q}" for q in questions)]))
     parts.append(ATTRIBUTION)

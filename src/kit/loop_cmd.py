@@ -10,20 +10,23 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from kit import __version__
 from kit.errors import KitError
 from kit.gitrun import Runner, run
-from kit.kitfile import KITFILE, KitFile, LoopConfig, read_kitfile
+from kit.kitfile import KITFILE, KitFile, LoopConfig, RequestsConfig, read_kitfile
 from kit.loop import driver
 from kit.loop.handover import handover_target, origin_latest, snapshot_src
 from kit.loop.prs import PR_FIELDS, Pr, loop_prs
+from kit.loop.requests import RequestRecord
 from kit.loop.schedule import loop_label, other_loop_agents, plist_xml, run_hours
 from kit.loop.settings import base_settings, loop_settings
 from kit.loop.state import owner_questions, read_status, write_status
 from kit.loop.stream import claude_command, failure_line, stream_lines
+from kit.request_cmd import file_request_file
 from kit.roadmap import read_roadmap
 
 STAGE_TIMEOUT = 4 * 3600
@@ -169,7 +172,34 @@ def file_log(runtime: Path) -> Callable[[str], None]:
     return log
 
 
-def real_env(repo: Path, runtime: Path, config: LoopConfig, test_command: str, weekend_ok: bool) -> driver.Env:
+@dataclass(frozen=True)
+class RequestHooks:
+    targets: tuple[str, ...] = ()
+    file_request: Callable[[Path, str], RequestRecord] | None = None
+
+
+def request_hooks(repo: Path, requests: RequestsConfig | None, kit_home: Path, runner: Runner) -> RequestHooks:
+    """The target names the loop prompts list and the filer the driver calls; none without requests.targets."""
+    if requests is None or not requests.targets:
+        return RequestHooks()
+    targets = requests.targets
+
+    def file_request(path: Path, branch: str) -> RequestRecord:
+        return file_request_file(repo, targets, kit_home, runner, path, branch)
+
+    return RequestHooks(tuple((repo / t).resolve().name for t in targets), file_request)
+
+
+def real_env(
+    repo: Path,
+    runtime: Path,
+    config: LoopConfig,
+    test_command: str,
+    weekend_ok: bool,
+    requests: RequestsConfig | None,
+    kit_home: Path,
+) -> driver.Env:
+    hooks = request_hooks(repo, requests, kit_home, run)
     worktree = repo / WORKTREE
     scratch = scratch_dir(repo)
     settings = write_settings(repo, runtime, scratch, config, test_command)
@@ -188,6 +218,8 @@ def real_env(repo: Path, runtime: Path, config: LoopConfig, test_command: str, w
         repo_name=repo.name,
         weekend_ok=weekend_ok,
         kit_version=f"v{__version__}",
+        request_targets=hooks.targets,
+        file_request=hooks.file_request,
     )
 
 
@@ -335,7 +367,7 @@ def run_loop(args: argparse.Namespace) -> int:
     lock = driver.acquire_lock(runtime / "lock")
     if lock is None:
         return 0
-    env = real_env(repo, runtime, config, kit.test_command, args.weekend_ok)
+    env = real_env(repo, runtime, config, kit.test_command, args.weekend_ok, kit.requests, args.kit_home)
 
     def action(e: driver.Env) -> str:
         ensure_worktree(repo, e.worktree, config.base_branch, run)
@@ -364,7 +396,7 @@ def resume_loop(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
     kit = read_kitfile(repo)
     config = require_loop(kit, repo)
-    env = real_env(repo, runtime_dir(args.kit_home, repo), config, kit.test_command, False)
+    env = real_env(repo, runtime_dir(args.kit_home, repo), config, kit.test_command, False, kit.requests, args.kit_home)
     ensure_worktree(repo, env.worktree, config.base_branch, run)
     resume(env, args.key)
     print(f"loop/{args.key} is back at stage spec")
