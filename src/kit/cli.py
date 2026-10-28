@@ -16,7 +16,7 @@ from kit.loop_cmd import DEFAULT_AGENTS, fetch_prs, loop_command, remote_loop_br
 from kit.migrate import load_known
 from kit.request import allowed_target
 from kit.request_cmd import file_request, read_request_file
-from kit.roadmap import read_roadmap
+from kit.roadmap import read_roadmap, requester_roadmaps
 from kit.roadmap_report import format_report
 from kit.snapshot import latest_tag
 from kit.status import find_kit_repos, status_lines
@@ -130,7 +130,7 @@ def roadmap_command(args: argparse.Namespace) -> int:
     roadmap = read_roadmap(repo)
     prs, gh_error = fetch_prs(repo, run)
     result = pick(roadmap, remote_loop_branches(repo, run), prs) if prs is not None else None
-    print(format_report(roadmap, result, prs, gh_error), end="")
+    print(format_report(roadmap, result, prs, gh_error, requester_roadmaps(repo, roadmap)), end="")
     return 0
 
 

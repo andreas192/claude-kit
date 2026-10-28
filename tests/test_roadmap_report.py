@@ -57,3 +57,31 @@ def test_only_open_drafts_count_as_parked():
     out = format_report(ROADMAP, Pick(None, ()), prs)
     assert "- https://x/pull/1: a" in out
     assert "pull/2" not in out and "pull/3" not in out
+
+
+DONE = parse_roadmap("### Fix\n- Status: done\n- Requested by: dg\n\n### Other\n- Status: done\n")
+
+
+def test_weekend_lists_done_requests_the_requester_has_not_marked_done():
+    requester = parse_roadmap("### Fix\n- Status: owner\n- Blocked by: waiting\n")
+    text = format_report(DONE, None, [], requesters={"dg": requester})
+    assert "- Tell dg: Fix is done" in text and "Other" not in text.split("For you this weekend:")[1]
+
+
+def test_a_requester_with_the_item_done_clears_it():
+    text = format_report(DONE, None, [], requesters={"dg": parse_roadmap("### Fix\n- Status: done\n")})
+    assert "Tell dg" not in text
+
+
+def test_an_unreadable_requester_roadmap_is_named():
+    text = format_report(DONE, None, [], requesters={"dg": None})
+    assert "- Tell dg: Fix is done (requester roadmap not found)" in text
+
+
+def test_a_requester_roadmap_without_the_item_lists_it():
+    text = format_report(DONE, None, [], requesters={"dg": parse_roadmap("### Else\n- Status: done\n")})
+    assert "- Tell dg: Fix is done" in text and "not found" not in text
+
+
+def test_requesters_default_to_no_tell_lines():
+    assert "Tell" not in format_report(DONE, None, [])

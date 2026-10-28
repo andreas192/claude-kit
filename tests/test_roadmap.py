@@ -4,7 +4,7 @@ import pytest
 from builders import GOOD
 
 from kit.errors import KitError
-from kit.roadmap import RoadmapError, item_key, parse_roadmap, read_roadmap
+from kit.roadmap import RoadmapError, item_key, parse_roadmap, read_roadmap, requester_roadmaps
 
 
 def test_parse_keeps_file_order_sections_and_fields():
@@ -101,3 +101,30 @@ def test_requested_by_is_a_field_on_any_status():
 
 def test_requested_by_is_blank_when_absent():
     assert parse_roadmap("### A\n- Status: open\n").items[0].requested_by == ""
+
+
+def _requested(*names: str) -> str:
+    return "".join(f"### {n}\n- Status: done\n- Requested by: {n}\n\n" for n in names)
+
+
+def test_requester_roadmaps_reads_siblings(tmp_path):
+    (tmp_path / "dg" / "docs").mkdir(parents=True)
+    (tmp_path / "dg" / "docs" / "roadmap.md").write_text("### Fix\n- Status: done\n")
+    text = "### Fix\n- Status: done\n- Requested by: dg\n\n### X\n- Status: done\n- Requested by: gone\n"
+    found = requester_roadmaps(tmp_path / "inv", parse_roadmap(text))
+    assert found["dg"].by_title("Fix").status == "done" and found["gone"] is None
+
+
+def test_requester_roadmaps_maps_invalid_and_unreadable_files_to_none(tmp_path):
+    (tmp_path / "bad" / "docs").mkdir(parents=True)
+    (tmp_path / "bad" / "docs" / "roadmap.md").write_text("### Fix\n- Status: nope\n")
+    (tmp_path / "bin" / "docs").mkdir(parents=True)
+    (tmp_path / "bin" / "docs" / "roadmap.md").write_bytes(b"\xff\xfe\x00")
+    (tmp_path / "dir" / "docs" / "roadmap.md").mkdir(parents=True)
+    found = requester_roadmaps(tmp_path / "inv", parse_roadmap(_requested("bad", "bin", "dir")))
+    assert found == {"bad": None, "bin": None, "dir": None}
+
+
+def test_requester_roadmaps_covers_only_done_requested_items(tmp_path):
+    text = "### A\n- Status: open\n- Requested by: a\n\n### B\n- Status: done\n\n### C\n- Status: done\n- Requested by: c\n"
+    assert set(requester_roadmaps(tmp_path / "inv", parse_roadmap(text))) == {"c"}

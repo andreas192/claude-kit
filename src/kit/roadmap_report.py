@@ -29,8 +29,28 @@ def _parked(pr: Pr) -> list[str]:
     return [f"- {pr.url}: {note.reason or 'parked'}", *(f"    - {question}" for question in note.questions)]
 
 
-def _weekend(roadmap: Roadmap, prs: list[Pr] | None, gh_error: str) -> list[str]:
+def _done_in(requester: Roadmap, title: str) -> bool:
+    return any(item.title == title and item.status == "done" for item in requester.items)
+
+
+def _tell(roadmap: Roadmap, requesters: dict[str, Roadmap | None]) -> list[str]:
+    lines = []
+    for item in roadmap.items:
+        if item.status != "done" or not item.requested_by or item.requested_by not in requesters:
+            continue
+        requester = requesters[item.requested_by]
+        if requester is None:
+            lines.append(f"- Tell {item.requested_by}: {item.title} is done (requester roadmap not found)")
+        elif not _done_in(requester, item.title):
+            lines.append(f"- Tell {item.requested_by}: {item.title} is done")
+    return lines
+
+
+def _weekend(
+    roadmap: Roadmap, prs: list[Pr] | None, gh_error: str, requesters: dict[str, Roadmap | None]
+) -> list[str]:
     lines = [f"- {item.title}: {item.blocked_by}" for item in roadmap.items if item.status == "owner"]
+    lines += _tell(roadmap, requesters)
     if prs is None:
         lines.append(f"- parked PRs: unknown (gh: {gh_error or 'no pull request list'})")
     for pr in prs or []:
@@ -39,6 +59,13 @@ def _weekend(roadmap: Roadmap, prs: list[Pr] | None, gh_error: str) -> list[str]
     return ["For you this weekend:", *lines] if lines else []
 
 
-def format_report(roadmap: Roadmap, result: Pick | None, prs: list[Pr] | None, gh_error: str = "") -> str:
-    lines = [_counts(roadmap), _next_pick(result, gh_error), *_skipped(result), *_weekend(roadmap, prs, gh_error)]
+def format_report(
+    roadmap: Roadmap,
+    result: Pick | None,
+    prs: list[Pr] | None,
+    gh_error: str = "",
+    requesters: dict[str, Roadmap | None] | None = None,
+) -> str:
+    weekend = _weekend(roadmap, prs, gh_error, requesters or {})
+    lines = [_counts(roadmap), _next_pick(result, gh_error), *_skipped(result), *weekend]
     return "\n".join(lines) + "\n"
