@@ -14,7 +14,7 @@ FIELDS = ("Status", "Blocked by", "Depends on", "Spec", "Plan", "PR", "Requested
 NEEDS_BLOCKED_BY = ("owner", "blocked")
 KEY_MAX = 50
 
-_FIELD_LINE = re.compile(r"^- ([A-Za-z ]+):\s*(.*)$")
+FIELD_LINE = re.compile(r"^- ([A-Za-z ]+):\s*(.*)$")
 
 
 @dataclass(frozen=True)
@@ -83,7 +83,7 @@ def _blocks(text: str) -> list[_Block]:
 def _fields_after(lines: list[str], heading_number: int) -> tuple[tuple[str, str], ...]:
     fields = []
     for line in lines[heading_number:]:
-        found = _FIELD_LINE.match(line)
+        found = FIELD_LINE.match(line)
         if not found:
             break
         fields.append((found.group(1), found.group(2).strip()))
