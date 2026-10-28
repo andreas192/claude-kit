@@ -18,7 +18,7 @@ from kit.errors import KitError
 from kit.gitrun import Runner, run
 from kit.kitfile import KITFILE, KitFile, LoopConfig, read_kitfile
 from kit.loop import driver
-from kit.loop.handover import handover_target, latest_applied, snapshot_src
+from kit.loop.handover import handover_target, origin_latest, snapshot_src
 from kit.loop.prs import PR_FIELDS, Pr, loop_prs
 from kit.loop.schedule import loop_label, other_loop_agents, plist_xml, run_hours
 from kit.loop.settings import base_settings, loop_settings
@@ -95,23 +95,6 @@ def fetch_prs(repo: Path, runner: Runner) -> tuple[list[Pr] | None, str]:
         return loop_prs(runner(["gh", "pr", "list", "--state", "all", "--limit", "500", "--json", PR_FIELDS], repo)), ""
     except (KitError, OSError, ValueError, KeyError, TypeError) as error:
         return None, _gh_reason(error)
-
-
-def origin_latest(repo: Path, base_branch: str, runner: Runner) -> str:
-    """The latest applied kit version in .claude/kit.json on origin/<base_branch>, after a fetch."""
-    ref = f"origin/{base_branch}:{KITFILE.as_posix()}"
-    runner(["git", "fetch", "origin"], repo)
-    try:
-        text = runner(["git", "show", ref], repo)
-    except KitError as error:
-        raise KitError(f"no {KITFILE.as_posix()} on origin/{base_branch}") from error
-    try:
-        latest = latest_applied(text)
-    except (ValueError, KeyError, TypeError, AttributeError, KitError) as error:
-        raise KitError(f"{ref} is not valid: {error}") from error
-    if latest is None:
-        raise KitError(f"{ref} has no applied version")
-    return latest
 
 
 def pending_handover(

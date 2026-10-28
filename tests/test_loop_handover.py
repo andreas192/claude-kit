@@ -2,7 +2,12 @@
 
 import json
 
-from kit.loop.handover import handover_target, latest_applied, snapshot_src
+import pytest
+from builders import commit, git, init_origin
+
+from kit.errors import KitError
+from kit.gitrun import run
+from kit.loop.handover import handover_target, latest_applied, origin_latest, snapshot_src
 
 
 def make_snapshot(home, version):
@@ -43,3 +48,25 @@ def test_no_handover_to_an_older_snapshot(tmp_path):
 def test_semver_not_string_order(tmp_path):
     make_snapshot(tmp_path, "v0.10.0")
     assert handover_target("v0.10.0", "v0.9.0", tmp_path) == tmp_path / "v0.10.0/src"
+
+
+def test_origin_latest_reads_kit_json_from_origin_base(tmp_path):
+    _, repo = init_origin(tmp_path)
+    assert origin_latest(repo, "main", run) == "v0.2.0"
+
+
+def test_origin_latest_without_kit_json_on_origin(tmp_path):
+    origin, repo = init_origin(tmp_path)
+    git(repo, "rm", "-q", ".claude/kit.json")
+    git(repo, "commit", "-m", "drop")
+    git(repo, "push")
+    with pytest.raises(KitError, match="no .claude/kit.json on origin/main"):
+        origin_latest(repo, "main", run)
+
+
+def test_origin_latest_with_malformed_json(tmp_path):
+    _, repo = init_origin(tmp_path)
+    commit(repo, {".claude/kit.json": "{oops"}, "break", "2026-10-21T10:00:00Z")
+    git(repo, "push")
+    with pytest.raises(KitError, match="origin/main:.claude/kit.json is not valid"):
+        origin_latest(repo, "main", run)

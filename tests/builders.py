@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from kit.bench.transcripts import Call, Session, Subagent, Transcript
+from kit.kitfile import Apply, KitFile, LoopConfig, write_kitfile
 
 
 def rec(timestamp: str) -> str:
@@ -128,3 +129,16 @@ Body text.
 - Status: done
 - Spec: docs/superpowers/specs/2026-10-18-dividend-pay-dates-and-calendar-design.md
 """
+
+
+def init_origin(tmp_path: Path) -> tuple[Path, Path]:
+    """A bare origin and a clone with one commit on main (docs/roadmap.md and .claude/kit.json)."""
+    origin, repo = tmp_path / "origin.git", tmp_path / "repo"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", str(origin), str(repo)], check=True, capture_output=True)
+    for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        git(repo, "config", key, value)
+    write_kitfile(repo, KitFile("pytest", (Apply("v0.2.0", "abc", "2026-10-20T00:00:00Z"),), LoopConfig("main")))
+    commit(repo, {"docs/roadmap.md": GOOD}, "init", "2026-10-20T10:00:00Z")
+    git(repo, "push", "-u", "origin", "main")
+    return origin, repo
