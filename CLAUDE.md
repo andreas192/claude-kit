@@ -11,6 +11,8 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
 - Spec: `docs/superpowers/specs/2026-10-24-roadmap-and-loop-design.md`
 - Plan: `docs/superpowers/plans/2026-10-24-roadmap-and-loop.md`
 - Spec: `docs/superpowers/specs/2026-10-25-insights-design.md`
+- Spec: `docs/superpowers/specs/2026-10-28-cross-repo-requests-design.md`
+- Plan: `docs/superpowers/plans/2026-10-28-cross-repo-requests.md`
 
 ## Global Constraints
 
