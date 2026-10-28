@@ -175,6 +175,15 @@ def test_refuses_when_an_open_request_pr_exists(pair, tmp_path):
     assert listed[listed.index("--state") + 1] == "open"
 
 
+def test_refuses_a_request_branch_left_on_origin(pair, tmp_path):
+    requester, target, origin = pair
+    git(target, "push", "origin", "main:request/fix-fx-rates")
+    with pytest.raises(KitError, match=r"^origin of investment already has branch request/fix-fx-rates with no open PR; delete it there first$"):
+        file_request(requester, target, parse_request(REQ), tmp_path / "kit", gh_fake())
+    assert_no_request_left(target, tmp_path / "kit")
+    assert "request/fix-fx-rates" in run(["git", "branch", "--list"], origin)
+
+
 def test_refuses_unreadable_gh_pr_list_output(pair, tmp_path):
     requester, target, _ = pair
     with pytest.raises(KitError, match="gh pr list"):

@@ -106,6 +106,13 @@ def require_no_open_pr(target: Path, key: str, run: Runner) -> None:
         raise KitError(f"open request PR already exists: {urls[0]}")
 
 
+def require_no_remote_branch(target: Path, key: str, run: Runner) -> None:
+    """Refuse a request/<key> already on origin (failed PR create, or a closed PR whose branch was kept); never force-push."""
+    branch = request_branch(key)
+    if run(["git", "ls-remote", "--heads", "origin", f"refs/heads/{branch}"], target).strip():
+        raise KitError(f"origin of {target.name} already has branch {branch} with no open PR; delete it there first")
+
+
 def new_roadmap_text(target: Path, base_text: str, item_text: str) -> str:
     try:
         return with_request(base_text, item_text)
@@ -179,6 +186,7 @@ def file_request(requester: Path, target: Path, request: Request, kit_home: Path
     base_text = base_roadmap_text(target, base, run)
     require_new_title(target, base_text, request.key)
     require_no_open_pr(target, request.key, run)
+    require_no_remote_branch(target, request.key, run)
     item_text = filed_item(request, requester.name)
     text = new_roadmap_text(target, base_text, item_text)
     message = commit_message(requester.name, request.title)
