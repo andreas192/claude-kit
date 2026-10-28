@@ -85,5 +85,14 @@ def test_the_shipped_starter_has_a_roadmap_with_the_format_and_no_items() -> Non
 
 
 def test_the_shipped_starter_claude_md_points_at_the_roadmap() -> None:
-    line = "Roadmap: docs/roadmap.md. The PR that lands an item sets its Status to done and fills in Spec, Plan and PR."
+    line = (
+        "Roadmap: docs/roadmap.md. The PR that lands an item sets its Status to done and fills in Spec, Plan and PR."
+        " If the item has `Requested by`, tell the owner to update that repo's roadmap."
+    )
     assert line in (STARTER_SOURCE / "CLAUDE.md").read_text().splitlines()
+
+
+def test_the_shipped_starter_claude_md_tells_how_to_ask_another_repo() -> None:
+    text = (STARTER_SOURCE / "CLAUDE.md").read_text()
+    assert "run `kit request`" in text
+    assert "never edit another repo's files" in text
