@@ -1,44 +1,27 @@
 """UNIT: kit.request_cmd, filing a request on a target over temp git repos with a bare origin and a fake gh."""
 
-import subprocess
 from pathlib import Path
 from unittest.mock import ANY
 
 import pytest
-from builders import commit, git
+from builders import REQUEST_ROADMAP as ROADMAP
+from builders import commit, git, init_request_pair, request_kit_file as kit_file
 
 from kit.errors import KitError
 from kit.gitrun import run
-from kit.kitfile import Apply, KitFile, LoopConfig, write_kitfile
+from kit.kitfile import LoopConfig, write_kitfile
 from kit.loop.requests import RequestRecord
 from kit.request import parse_request
 from kit.request_cmd import Filed, file_request, file_request_file, target_base
 from kit.roadmap import parse_roadmap
 
 REQ = "Target: investment\n### Fix FX rates\n- Status: open\n- Depends on: A\n\nRates are stale.\n"
-ROADMAP = "## Now\n\n### A\n- Status: open\n"
 PR_URL = "https://github.com/o/investment/pull/9"
-
-
-def kit_file(version: str = "v0.4.0", loop: LoopConfig | None = None) -> KitFile:
-    return KitFile("pytest", (Apply(version, "abc", "2026-10-28T00:00:00Z"),), loop)
 
 
 @pytest.fixture
 def pair(tmp_path: Path) -> tuple[Path, Path, Path]:
-    """A bare origin, a target clone `investment/` with kit.json and a roadmap on main, and a requester beside it."""
-    origin, target = tmp_path / "origin.git", tmp_path / "investment"
-    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
-    subprocess.run(["git", "clone", str(origin), str(target)], check=True, capture_output=True)
-    for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
-        git(target, "config", key, value)
-    write_kitfile(target, kit_file())
-    commit(target, {"docs/roadmap.md": ROADMAP}, "init", "2026-10-28T10:00:00Z")
-    git(target, "push", "-u", "origin", "main")
-    git(target, "remote", "set-head", "origin", "-a")
-    requester = tmp_path / "dividend-growth"
-    requester.mkdir()
-    return requester, target, origin
+    return init_request_pair(tmp_path)
 
 
 class GhFake:

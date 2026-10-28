@@ -115,6 +115,12 @@ def read_kitfile(repo: Path) -> KitFile | None:
         raise KitError(f"{path}: invalid kit.json: {reason}") from exc
 
 
+def require_requests(kit: KitFile | None, repo: Path) -> RequestsConfig:
+    if kit is None or kit.requests is None:
+        raise KitError(f"{repo / KITFILE} has no requests section")
+    return kit.requests
+
+
 def with_apply(kit: KitFile, apply: Apply) -> KitFile:
     if kit.applies and kit.applies[-1].version == apply.version:
         raise KitError(f"already on {apply.version}")

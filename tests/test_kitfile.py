@@ -5,7 +5,7 @@ import json
 import pytest
 
 from kit.errors import KitError
-from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, parse_kitfile, read_kitfile, with_apply, write_kitfile
+from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, parse_kitfile, read_kitfile, require_requests, with_apply, write_kitfile
 
 
 def test_with_apply_appends_and_refuses_the_same_version():
@@ -109,3 +109,14 @@ def test_requests_survive_write_and_with_apply(tmp_path):
     kit = KitFile("t", (), None, RequestsConfig(("../investment",)))
     write_kitfile(tmp_path, with_apply(kit, Apply("v0.4.0", "c", "d")))
     assert read_kitfile(tmp_path).requests == RequestsConfig(("../investment",))
+
+
+def test_require_requests_returns_the_section(tmp_path):
+    config = RequestsConfig(("../investment",))
+    assert require_requests(KitFile("t", (), None, config), tmp_path) == config
+
+
+@pytest.mark.parametrize("kit", [None, KitFile("t", ())])
+def test_require_requests_refuses_a_repo_without_the_section(tmp_path, kit):
+    with pytest.raises(KitError, match="has no requests section"):
+        require_requests(kit, tmp_path)
