@@ -91,3 +91,13 @@ def test_read_roadmap_reads_the_repo_file_and_names_a_missing_one(tmp_path):
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "roadmap.md").write_text(GOOD)
     assert len(read_roadmap(tmp_path).items) == 4
+
+
+def test_requested_by_is_a_field_on_any_status():
+    text = "### A\n- Status: owner\n- Blocked by: review\n- Requested by: dividend-growth\n\n### B\n- Status: done\n- Requested by: investment\n"
+    roadmap = parse_roadmap(text)
+    assert [i.requested_by for i in roadmap.items] == ["dividend-growth", "investment"]
+
+
+def test_requested_by_is_blank_when_absent():
+    assert parse_roadmap("### A\n- Status: open\n").items[0].requested_by == ""

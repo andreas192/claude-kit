@@ -10,7 +10,7 @@ from kit.errors import KitError
 
 ROADMAP_PATH = Path("docs") / "roadmap.md"
 STATUSES = ("open", "owner", "blocked", "active", "done", "dropped")
-FIELDS = ("Status", "Blocked by", "Depends on", "Spec", "Plan", "PR")
+FIELDS = ("Status", "Blocked by", "Depends on", "Spec", "Plan", "PR", "Requested by")
 NEEDS_BLOCKED_BY = ("owner", "blocked")
 KEY_MAX = 50
 
@@ -28,6 +28,7 @@ class Item:
     spec: str
     plan: str
     pr: str
+    requested_by: str
     line: int
 
 
@@ -142,6 +143,7 @@ def _item(block: _Block) -> Item:
         spec=values.get("Spec", ""),
         plan=values.get("Plan", ""),
         pr=values.get("PR", ""),
+        requested_by=values.get("Requested by", ""),
         line=block.line,
     )
 
