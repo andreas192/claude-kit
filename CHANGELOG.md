@@ -1,13 +1,13 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 — 2026-11-01
 
 Cross-repo roadmap requests.
 
-- `kit request <requester-repo> <target-repo> <request-file>`: files an item from one repo in another repo's `docs/roadmap.md` as a PR and prints its URL. It works in a temporary worktree of the target under `~/.claude/kit/requests/`, pushes one `request/<key>` branch and opens one PR; the requester and the target's checked-out branch are untouched. The target must run kit v0.4.0 or later.
+- `kit request <requester-repo> <target-repo> <request-file>`: files an item from one repo in another repo's `docs/roadmap.md` as a PR and prints its URL. It works in a temporary worktree of the target under `~/.claude/kit/requests/`, pushes one `request/<key>` branch and opens one PR; the requester and the target's checked-out branch are untouched. The target must run kit v0.4.0 or later. It refuses a target not in `requests.targets`, a request file that is not exactly one `###` item, a title already on the target's roadmap, an open request PR or a `request/<key>` branch already on the target's origin, and a commit that changes anything besides `docs/roadmap.md`.
 - `Requested by` field on roadmap items: the filed item carries `Status: owner`, a `Blocked by` line naming the review of the request, and `Requested by: <requester>`. `kit roadmap` adds a "Tell <repo>" line to the owner's weekend list when an item with `Requested by` is done and the requesting repo's roadmap does not show it done yet.
 - `.claude/kit.json` gets an optional `requests` section with `targets` (paths such as `../investment`) that `kit request` may file into. `kit apply` keeps it.
-- The loop driver files request files after each stage and lists the requests filed in the PR body. It records them in `~/.claude/kit/loop/<repo>/requests.json`.
+- The loop driver files the `<name>.md` request files a session writes to `<scratch>/requests/` after each stage, also when the stage fails, and records them in `~/.claude/kit/loop/<repo>/requests.json`. A failed request never fails the stage. Parked and PR bodies list the requests filed on other repos; requests filed during the PR stage are added as a PR comment.
 - `kit apply` adds a note to the PR body for each `CLAUDE.md` line that says "never write to" a request target without naming `kit request`, so the owner can add the exception by hand.
 - `starter/CLAUDE.md` tells sessions to ask another repo through `kit request`, and to tell the owner to update the requesting repo's roadmap.
 
