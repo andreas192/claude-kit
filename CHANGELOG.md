@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.2 — 2026-11-01
 
 - `context-warn` fires once per 60k step (60k, 120k, …), down from 80k. Insights showed sessions often ran past 80k, some to 120k, before handing off, so the earlier warning leaves room to write the handoff before context gets expensive. The starter `docs/token-strategy.md` says ~60k to match. Benchmark B2 still reports the share of sessions over 80k, so results stay comparable across kit versions.
 
