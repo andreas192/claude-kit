@@ -77,6 +77,19 @@ def ensure_worktree(repo: Path, worktree: Path, base_branch: str, runner: Runner
     if not worktree.exists():
         runner(["git", "fetch", "origin"], repo)
         runner(["git", "worktree", "add", "--detach", str(worktree), f"origin/{base_branch}"], repo)
+    exclude_worktree(repo, worktree, runner)
+
+
+def exclude_worktree(repo: Path, worktree: Path, runner: Runner) -> None:
+    """List a worktree inside the repo in its local .git/info/exclude, so `kit apply` still sees a clean tree."""
+    if not worktree.resolve().is_relative_to(repo.resolve()):
+        return
+    line = f"/{worktree.resolve().relative_to(repo.resolve()).as_posix()}/"
+    exclude = repo / runner(["git", "rev-parse", "--git-path", "info/exclude"], repo).strip()
+    lines = exclude.read_text().splitlines() if exclude.exists() else []
+    if line not in lines:
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        exclude.write_text("".join(f"{kept}\n" for kept in [*lines, line]))
 
 
 def remote_loop_branches(repo: Path, runner: Runner) -> list[str]:

@@ -108,6 +108,22 @@ def test_ensure_worktree_adds_a_detached_worktree_once(tmp_path):
     ensure_worktree(repo, worktree, "main", run)
 
 
+def test_ensure_worktree_keeps_the_repo_status_clean(tmp_path):
+    _, repo = init_origin(tmp_path)
+    ensure_worktree(repo, repo / ".claude" / "worktrees" / "feature-loop", "main", run)
+    assert run(["git", "status", "--porcelain"], repo) == ""
+
+
+def test_ensure_worktree_excludes_an_existing_worktree_once(tmp_path):
+    _, repo = init_origin(tmp_path)
+    worktree = repo / ".claude" / "worktrees" / "feature-loop"
+    git(repo, "worktree", "add", "--detach", str(worktree), "origin/main")
+    ensure_worktree(repo, worktree, "main", run)
+    ensure_worktree(repo, worktree, "main", run)
+    assert run(["git", "status", "--porcelain"], repo) == ""
+    assert (repo / ".git" / "info" / "exclude").read_text().count("/.claude/worktrees/feature-loop/") == 1
+
+
 def test_remote_loop_branches_lists_origin_loop_branches(tmp_path):
     _, repo = init_origin(tmp_path)
     loop_branch(repo, "row-a", ANSWERED_SPEC, "parked")
