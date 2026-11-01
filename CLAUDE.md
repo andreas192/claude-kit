@@ -22,7 +22,7 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
 - Tests run offline with fixtures built in code; `git` runs on temp repos; `gh` and `node` hook runs go through injected runners or real `node` (skip if missing). Never read the real `~/.claude/projects/` in tests.
 - Follow `docs/code-conventions.md` (copied from dividend-growth in task 1): minimal functions, typed named results, typed errors (`KitError`), UNIT tests beside each module, PIPELINE tests only in `tests/test_cli_pipeline.py`. `cli.py`, `apply.py` and `bench/run.py` are wiring.
 - Plugin name `kit`; marketplace name `kit-v<major>-<minor>-<patch>`; agents `kit:implementer-haiku`, `kit:implementer-sonnet`, `kit:reviewer-sonnet`.
-- Named constants: `MIN_SESSIONS = 5`, `FIX_WINDOW_DAYS = 7`, `DEFAULT_STEP = 80_000` (context-warn), `KIT_HOME = ~/.claude/kit`.
+- Named constants: `MIN_SESSIONS = 5`, `FIX_WINDOW_DAYS = 7`, `DEFAULT_STEP = 60_000` (context-warn), `KIT_HOME = ~/.claude/kit`.
 - Never write to `../investment` or `../capital-trading` from a dividend-growth session, except a roadmap request to investment through `kit request`. Investment is changed only by `kit apply` run by the owner or from a session inside investment.
 - `request` writes nothing in the requester; in the target it only creates a temporary worktree under `~/.claude/kit/requests/`, pushes one `request/<key>` branch and opens one PR adding one item to `docs/roadmap.md`.
 

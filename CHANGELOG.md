@@ -11,6 +11,10 @@ Cross-repo roadmap requests.
 - `kit apply` adds a note to the PR body for each `CLAUDE.md` line that says "never write to" a request target without naming `kit request`, so the owner can add the exception by hand.
 - `starter/CLAUDE.md` tells sessions to ask another repo through `kit request`, and to tell the owner to update the requesting repo's roadmap.
 
+## v0.3.2 — 2026-11-01
+
+- `context-warn` fires once per 60k step (60k, 120k, …), down from 80k. Insights showed sessions often ran past 80k, some to 120k, before handing off, so the earlier warning leaves room to write the handoff before context gets expensive. The starter `docs/token-strategy.md` says ~60k to match. Benchmark B2 still reports the share of sessions over 80k, so results stay comparable across kit versions.
+
 ## v0.3.1 — 2026-10-28
 
 - `scripts/apply-kit.sh` defaults to the current version again. v0.3.0 left its default, and the note in `docs/command.md`, at v0.2.0.
