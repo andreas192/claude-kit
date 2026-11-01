@@ -1015,7 +1015,7 @@ def test_pr_prompt_carries_requests_filed_and_requested_by(tmp_path):
 def test_pr_prompt_defaults_without_requests_or_roadmap(tmp_path):
     reason, f = full_item(tmp_path)
     (pr_prompt,) = f.prompts["pr"]
-    assert "Requested by: ``" in pr_prompt and "- none" in pr_prompt and "{" not in pr_prompt
+    assert "Requested by: ``" in pr_prompt and "{" not in pr_prompt
 
 
 def test_requests_filed_during_the_pr_stage_are_commented_on_the_pr(tmp_path):
@@ -1041,3 +1041,60 @@ def test_parked_draft_lists_the_requests(tmp_path):
     (draft,) = f.drafts()
     body = draft[draft.index("--body") + 1]
     assert "## Requests filed on other repos" in body and "https://x/req/1" in body
+
+
+def stage_alone(tmp_path, spec: dict) -> FakeEnv:
+    f = FakeEnv(tmp_path, {"spec": [spec]}, spec_text=None, request_targets=("investment",))
+    f.branch = "loop/row-a"
+    return f
+
+
+def test_requests_are_filed_on_their_branch_when_the_push_after_the_session_raises(tmp_path):
+    f = stage_alone(tmp_path, step(requests={"a.md": FIX_REQUEST}))
+    f.fail_on = "git push -u origin loop/row-a"
+    with pytest.raises(subprocess.CalledProcessError):
+        _Run(f.env(), Usage(0.1, 0.1)).step("spec", "loop/row-a", None)
+    assert f.filed == [(FIX_REQUEST, "loop/row-a")] and not any(f.requests_dir.iterdir())
+    assert read_requests(f.runtime, "loop/row-a") == [RequestRecord("investment", "Fix", url="https://x/req/1")]
+
+
+def test_requests_are_filed_on_their_branch_when_the_session_raises(tmp_path):
+    f = stage_alone(tmp_path, step(requests={"a.md": FIX_REQUEST}))
+    session = f.claude
+
+    def timed_out(stage: str, text: str) -> list[str]:
+        session(stage, text)
+        raise subprocess.TimeoutExpired(["claude"], 1)
+
+    f.claude = timed_out
+    with pytest.raises(subprocess.TimeoutExpired):
+        _Run(f.env(), Usage(0.1, 0.1)).step("spec", "loop/row-a", None)
+    assert read_requests(f.runtime, "loop/row-a") == [RequestRecord("investment", "Fix", url="https://x/req/1")]
+
+
+def test_rules_ask_for_one_md_file_per_item(tmp_path):
+    env = replace(env_with(LoopConfig("develop")), request_targets=("investment",))
+    assert "one `<name>.md` file per roadmap item" in render("build", env)
+
+
+def test_non_md_request_files_are_logged_and_left_in_place(tmp_path):
+    reason, f = run_fake(
+        tmp_path, request_targets=("investment",), spec=[step(requests={"fix.txt": FIX_REQUEST})], plan=[step("LOOP: park x")]
+    )
+    assert f.filed == [] and [p.name for p in f.requests_dir.iterdir()] == ["fix.txt"]
+    assert f"loop/row-a request file {f.requests_dir / 'fix.txt'} is not a .md file; left in place" in f.logs
+
+
+def test_pr_prompt_has_no_requests_section_without_request_targets(tmp_path):
+    reason, f = full_item(tmp_path)
+    (pr_prompt,) = f.prompts["pr"]
+    assert "Requests filed on other repos" not in pr_prompt and "- none" not in pr_prompt
+    assert "links to the spec and plan, and as the last line" in pr_prompt
+
+
+def test_pr_prompt_has_the_requests_section_with_request_targets_and_none_filed(tmp_path):
+    reason, f = run_fake(
+        tmp_path, request_targets=("investment",), spec=[step()], plan=[step()], build=[step()], pr=[step(commit=False, opens=True)]
+    )
+    (pr_prompt,) = f.prompts["pr"]
+    assert 'a section "Requests filed on other repos" containing these lines verbatim:\n- none\n   and as the last line' in pr_prompt

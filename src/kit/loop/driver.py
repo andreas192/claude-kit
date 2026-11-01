@@ -42,7 +42,7 @@ CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 MAX_ERRORS = 2
 _ROADMAP_FILE = ROADMAP_PATH.as_posix()
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
-_BLANK_FIELDS = {**dict.fromkeys(("row", "key", "branch", "spec", "plan", "requested_by"), ""), "requests_filed": "- none"}
+_BLANK_FIELDS = {**dict.fromkeys(("row", "key", "branch", "spec", "plan", "requested_by", "requests_section"), "")}
 UNKNOWN_TARGET = "unknown"
 
 
@@ -75,7 +75,7 @@ def _request_rule(targets: tuple[str, ...], requests_dir: Path) -> str:
     if not targets:
         return ""
     return (
-        f"; to ask another repo for a fix or a feature, write one roadmap item per file into `{requests_dir}`, "
+        f"; to ask another repo for a fix or a feature, write one `<name>.md` file per roadmap item into `{requests_dir}`, "
         f"its first line `Target: <repo>` (one of {_ticked(targets)}), then the `### <title>` item; "
         "the driver files it as a PR on that repo. Never write to the other repo. "
         "If the item cannot go on without that fix, reply `LOOP: park` with a reason that names the request"
@@ -255,13 +255,18 @@ def _make_requests_dir(env: Env) -> None:
         env.log(f"could not create {_requests_dir(env)}: {_one_line(e)}")
 
 
-def _request_files(env: Env) -> list[Path]:
+def _request_files(env: Env, branch: str) -> list[Path]:
+    """The `.md` files in the requests dir, sorted; each other file is logged and left in place."""
     folder = _requests_dir(env)
     try:
-        return sorted(p for p in folder.glob("*.md") if p.is_file()) if folder.is_dir() else []
+        files = sorted(p for p in folder.iterdir() if p.is_file()) if folder.is_dir() else []
     except OSError as e:
         env.log(f"could not list {folder}: {_one_line(e)}")
         return []
+    for path in files:
+        if path.suffix != ".md":
+            env.log(f"{branch} request file {path} is not a .md file; left in place")
+    return [path for path in files if path.suffix == ".md"]
 
 
 def _file_requests(env: Env, branch: str) -> list[RequestRecord]:
@@ -269,7 +274,7 @@ def _file_requests(env: Env, branch: str) -> list[RequestRecord]:
     if env.file_request is None:
         return []
     records = []
-    for path in _request_files(env):
+    for path in _request_files(env, branch):
         records.append(_file_one(env.file_request, path, branch))
         _delete(env, path)
     if records:
@@ -300,9 +305,16 @@ def _requested_by(env: Env, key: str) -> str:
     return next((item.requested_by for item in roadmap.items if item.key == key), "")
 
 
+def _requests_section(env: Env, branch: str) -> str:
+    """The PR body's requests section, asked for only when the repo has request targets."""
+    if not env.request_targets:
+        return ""
+    lines = "\n".join(request_lines(_logged_requests(env, branch))) or "- none"
+    return f'a section "Requests filed on other repos" containing these lines verbatim:\n{lines}\n   '
+
+
 def _pr_fields(env: Env, branch: str, key: str) -> dict[str, str]:
-    lines = request_lines(_logged_requests(env, branch))
-    return {"requests_filed": "\n".join(lines) or "- none", "requested_by": _requested_by(env, key)}
+    return {"requests_section": _requests_section(env, branch), "requested_by": _requested_by(env, key)}
 
 
 def _open_draft(env: Env, branch: str, status: Status | None, reason: str) -> None:
@@ -486,10 +498,12 @@ class _Run:
         head = env.sh(["git", "rev-parse", "HEAD"])
         env.log(f"{branch} {stage} start")
         _make_requests_dir(env)
-        r = parse_stream(env.claude(stage, render(stage, env, **self.fields(stage, branch, status))))
-        _log_result(env, f"{branch} {stage}", r)
-        _push_if_ahead(env, branch)
-        self.requests(stage, branch)
+        try:
+            r = parse_stream(env.claude(stage, render(stage, env, **self.fields(stage, branch, status))))
+            _log_result(env, f"{branch} {stage}", r)
+            _push_if_ahead(env, branch)
+        finally:
+            self.requests(stage, branch)
         if r.outcome in ("ok", "more") and stage != "pr" and env.sh(["git", "rev-parse", "HEAD"]) == head:
             return StageResult("error", "stage made no commit", r.usage, r.cost)
         if r.outcome == "ok" and stage == "pr" and not _ready_prs(env, branch):
