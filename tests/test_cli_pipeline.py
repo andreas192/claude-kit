@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from builders import add_loop_package, assistant, commit, git, rec, tag
+from builders import add_loop_package, assistant, commit, git, init_request_pair, rec, tag
 from test_detect import DGI_WIRING, build_repo
 
 from kit.bench.transcripts import transcript_dir_name
@@ -18,7 +18,7 @@ from kit.cli import main
 from kit.gitrun import run
 from kit.loop.ledger import StageEntry, append_entry
 from kit.loop.stream import StageCost
-from kit.kitfile import Apply, KitFile, LoopConfig, read_kitfile, write_kitfile
+from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, read_kitfile, write_kitfile
 from kit.snapshot import snapshot
 
 APPLIED = "2026-10-18T00:00:00Z"
@@ -192,6 +192,10 @@ def commits(repo: Path) -> int:
 
 @needs_node
 def test_apply_puts_the_version_into_the_repo_on_a_branch(tmp_path, target, kit_repo):
+    kit_path = target / ".claude/kit.json"
+    kit_path.write_text(json.dumps({"test_command": "true", "applies": [], "requests": {"targets": ["../investment"]}}, indent=2) + "\n")
+    git(target, "add", "-A")
+    git(target, "commit", "-m", "requests section")
     argv = apply_args(tmp_path, target)
     before = commits(target)
     assert main(argv) == 0
@@ -202,6 +206,7 @@ def test_apply_puts_the_version_into_the_repo_on_a_branch(tmp_path, target, kit_
     assert "kit@kit-v0-1-0" in settings["enabledPlugins"]
     assert "test-layer-guard.mjs" not in json.dumps(settings.get("hooks", {})) and "context-warn.mjs" not in json.dumps(settings.get("hooks", {}))
     assert json.loads((target / ".claude/kit.json").read_text())["test_command"] == "true"
+    assert json.loads((target / ".claude/kit.json").read_text())["requests"] == {"targets": ["../investment"]}
     assert not any((target / name).exists() for name in LOCAL_HOOKS)
     assert (target / ".claude/kit-bench/baseline.json").is_file()
     assert (target / "docs/token-strategy.md").is_file() and (target / ".claude/test-layers.json").is_file()
@@ -427,3 +432,18 @@ def test_insights_twice_leaves_the_same_report(insights_base, capsys):
     first = capsys.readouterr().out
     assert main(insights_args(base, root, home)) == 0
     assert capsys.readouterr().out == first
+
+
+def test_request_files_a_pr_on_the_target(tmp_path, monkeypatch, capsys):
+    requester, target, origin = init_request_pair(tmp_path)
+    git(requester, "init", "-b", "main")
+    write_kitfile(requester, KitFile("pytest", (Apply("v0.4.0", "abc", APPLIED),), None, RequestsConfig(("../investment",))))
+    commit(requester, {"a.py": "1"}, "init", "2026-10-28T10:00:00Z")
+    req = tmp_path / "req.md"
+    req.write_text("Target: investment\n### Fix FX rates\n\nRates are stale.\n")
+    url = "https://github.com/o/investment/pull/9"
+    fake_bin(tmp_path, monkeypatch, {"gh": f'if [ "$2" = list ]; then echo "[]"; else echo "{url}"; fi'})
+    assert main(["request", str(requester), str(target), str(req), "--kit-home", str(tmp_path / "kit")]) == 0
+    assert capsys.readouterr().out.strip() == url
+    assert run(["git", "diff", "--name-only", "main", "request/fix-fx-rates"], origin).split() == ["docs/roadmap.md"]
+    assert run(["git", "status", "--porcelain"], requester).strip() == ""

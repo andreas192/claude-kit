@@ -14,11 +14,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import IO
 
+from kit.errors import KitError
 from kit.kitfile import LoopConfig
 from kit.loop.ledger import StageEntry, StopEntry, append_entry
 from kit.loop.pick import Pick, none_note
 from kit.loop.pick import pick as choose
 from kit.loop.prs import PR_FIELDS, Pr, loop_prs, park_body
+from kit.loop.requests import REQUESTS_HEADING, RequestRecord, add_requests, read_requests, request_lines
 from kit.loop.schedule import may_start
 from kit.loop.state import (
     Status,
@@ -40,7 +42,8 @@ CO_AUTHOR = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 MAX_ERRORS = 2
 _ROADMAP_FILE = ROADMAP_PATH.as_posix()
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
-_BLANK_FIELDS = dict.fromkeys(("row", "key", "branch", "spec", "plan"), "")
+_BLANK_FIELDS = {**dict.fromkeys(("row", "key", "branch", "spec", "plan", "requested_by", "requests_section"), "")}
+UNKNOWN_TARGET = "unknown"
 
 
 @dataclass
@@ -59,6 +62,8 @@ class Env:
     repo_name: str
     weekend_ok: bool = False
     kit_version: str = ""
+    request_targets: tuple[str, ...] = ()
+    file_request: Callable[[Path, str], RequestRecord] | None = None
 
 
 def _ticked(paths: tuple[str, ...]) -> str:
@@ -66,14 +71,26 @@ def _ticked(paths: tuple[str, ...]) -> str:
     return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} or {quoted[-1]}"
 
 
-def _rules(config: LoopConfig) -> str:
+def _request_rule(targets: tuple[str, ...], requests_dir: Path) -> str:
+    if not targets:
+        return ""
+    return (
+        f"; to ask another repo for a fix or a feature, write one `<name>.md` file per roadmap item into `{requests_dir}`, "
+        f"its first line `Target: <repo>` (one of {_ticked(targets)}), then the `### <title>` item; "
+        "the driver files it as a PR on that repo. Never write to the other repo. "
+        "If the item cannot go on without that fix, reply `LOOP: park` with a reason that names the request"
+    )
+
+
+def _rules(config: LoopConfig, targets: tuple[str, ...] = (), requests_dir: Path = Path()) -> str:
     never_write = f"never write {_ticked(config.forbidden_paths)}; " if config.forbidden_paths else ""
     one_command = (
         "one Bash command per call, never `&&`, `;`, a pipe or a heredoc, never `cat`, `sed` or `printf` "
         "(read with Read, change files with Edit), never `git -C` (git runs in this checkout), "
         "because in don't-ask mode every part of a compound command must be allowed"
     )
-    return f"{never_write}never merge or force-push; every commit message ends with the line `{CO_AUTHOR}`; {one_command}"
+    rules = f"{never_write}never merge or force-push; every commit message ends with the line `{CO_AUTHOR}`; {one_command}"
+    return rules + _request_rule(targets, requests_dir)
 
 
 def _read_first(config: LoopConfig) -> str:
@@ -89,13 +106,17 @@ def _config_fields(env: Env) -> dict[str, str]:
     return {
         "test_command": env.test_command,
         "base_branch": env.config.base_branch,
-        "rules": _rules(env.config),
+        "rules": _rules(env.config, env.request_targets, _requests_dir(env)),
         "read_first": _read_first(env.config),
         "pr_checklist": _checklist(env.config),
         "n_create": str(steps + 2),
         "n_roadmap": str(steps + 3),
         "pr_body": str(env.scratch / "pr-body.md"),
     }
+
+
+def _requests_dir(env: Env) -> Path:
+    return env.scratch / "requests"
 
 
 def render(stage: str, env: Env, **fields: str) -> str:
@@ -197,10 +218,110 @@ def _open_prs(env: Env, branch: str) -> list[dict]:
     return json.loads(env.sh(["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number,isDraft"]))
 
 
+def _logged_requests(env: Env, branch: str) -> list[RequestRecord]:
+    """The requests filed for `branch`; an unreadable log is logged and reads as none, so it never stops the loop."""
+    try:
+        return read_requests(env.runtime, branch)
+    except (KitError, OSError) as e:
+        env.log(f"{branch} requests log: {_one_line(e)}")
+        return []
+
+
+def _one_line(error: Exception) -> str:
+    lines = str(error).splitlines()
+    return lines[0] if lines else type(error).__name__
+
+
+def _file_one(file_request: Callable[[Path, str], RequestRecord], path: Path, branch: str) -> RequestRecord:
+    try:
+        return file_request(path, branch)
+    except (KitError, OSError) as e:
+        return RequestRecord(UNKNOWN_TARGET, path.name, error=_one_line(e))
+
+
+def _delete(env: Env, path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as e:
+        env.log(f"could not delete request file {path}: {_one_line(e)}")
+
+
+def _make_requests_dir(env: Env) -> None:
+    if env.file_request is None:
+        return
+    try:
+        _requests_dir(env).mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        env.log(f"could not create {_requests_dir(env)}: {_one_line(e)}")
+
+
+def _request_files(env: Env, branch: str) -> list[Path]:
+    """The `.md` files in the requests dir, sorted; each other file is logged and left in place."""
+    folder = _requests_dir(env)
+    try:
+        files = sorted(p for p in folder.iterdir() if p.is_file()) if folder.is_dir() else []
+    except OSError as e:
+        env.log(f"could not list {folder}: {_one_line(e)}")
+        return []
+    for path in files:
+        if path.suffix != ".md":
+            env.log(f"{branch} request file {path} is not a .md file; left in place")
+    return [path for path in files if path.suffix == ".md"]
+
+
+def _file_requests(env: Env, branch: str) -> list[RequestRecord]:
+    """File each request file the session wrote, delete it and log the outcomes; nothing here raises."""
+    if env.file_request is None:
+        return []
+    records = []
+    for path in _request_files(env, branch):
+        records.append(_file_one(env.file_request, path, branch))
+        _delete(env, path)
+    if records:
+        try:
+            add_requests(env.runtime, branch, records)
+        except (KitError, OSError) as e:
+            env.log(f"{branch} requests log: {_one_line(e)}")
+    return records
+
+
+def _comment_requests(env: Env, branch: str, records: list[RequestRecord]) -> None:
+    """Post requests filed during the PR stage on the branch's open PR; a failure is logged, never raised."""
+    try:
+        prs = _open_prs(env, branch)
+        if not prs:
+            return
+        body = _write_runtime(env, "requests-comment.md", "\n".join([REQUESTS_HEADING, "", *request_lines(records)]) + "\n")
+        env.sh(["gh", "pr", "comment", str(prs[0]["number"]), "--body-file", str(body)])
+    except (KitError, OSError, subprocess.CalledProcessError, ValueError, KeyError) as e:
+        env.log(f"{branch} request comment failed: {_one_line(e)}")
+
+
+def _requested_by(env: Env, key: str) -> str:
+    try:
+        roadmap = parse_roadmap((env.worktree / ROADMAP_PATH).read_text())
+    except (KitError, OSError):
+        return ""
+    return next((item.requested_by for item in roadmap.items if item.key == key), "")
+
+
+def _requests_section(env: Env, branch: str) -> str:
+    """The PR body's requests section, asked for only when the repo has request targets."""
+    if not env.request_targets:
+        return ""
+    lines = "\n".join(request_lines(_logged_requests(env, branch))) or "- none"
+    return f'a section "Requests filed on other repos" containing these lines verbatim:\n{lines}\n   '
+
+
+def _pr_fields(env: Env, branch: str, key: str) -> dict[str, str]:
+    return {"requests_section": _requests_section(env, branch), "requested_by": _requested_by(env, key)}
+
+
 def _open_draft(env: Env, branch: str, status: Status | None, reason: str) -> None:
     key = status.key if status else branch.removeprefix("loop/")
     spec, plan = (status.spec, status.plan) if status else ("", "")
-    body = park_body(reason, spec, plan, owner_questions(_read(env.worktree / spec)) if spec else [])
+    questions = owner_questions(_read(env.worktree / spec)) if spec else []
+    body = park_body(reason, spec, plan, questions, request_lines(_logged_requests(env, branch)))
     title = f"loop (parked): {status.row if status else key}"
     existing = _open_prs(env, branch)
     if existing:
@@ -376,14 +497,29 @@ class _Run:
             _drop_status(env, branch)
         head = env.sh(["git", "rev-parse", "HEAD"])
         env.log(f"{branch} {stage} start")
-        r = parse_stream(env.claude(stage, render(stage, env, **_fields(status, branch))))
-        _log_result(env, f"{branch} {stage}", r)
-        _push_if_ahead(env, branch)
+        _make_requests_dir(env)
+        try:
+            r = parse_stream(env.claude(stage, render(stage, env, **self.fields(stage, branch, status))))
+            _log_result(env, f"{branch} {stage}", r)
+            _push_if_ahead(env, branch)
+        finally:
+            self.requests(stage, branch)
         if r.outcome in ("ok", "more") and stage != "pr" and env.sh(["git", "rev-parse", "HEAD"]) == head:
             return StageResult("error", "stage made no commit", r.usage, r.cost)
         if r.outcome == "ok" and stage == "pr" and not _ready_prs(env, branch):
             return StageResult("error", "pr stage reported ok but no ready PR exists", r.usage, r.cost)
         return r
+
+    def fields(self, stage: str, branch: str, status: Status | None) -> dict[str, str]:
+        fields = _fields(status, branch)
+        return {**fields, **_pr_fields(self.env, branch, fields["key"])} if stage == "pr" else fields
+
+    def requests(self, stage: str, branch: str) -> None:
+        records = _file_requests(self.env, branch)
+        for line in request_lines(records):
+            self.env.log(f"{branch} {stage} request {line}")
+        if records and stage == "pr":
+            _comment_requests(self.env, branch, records)
 
     def work(self, branch: str, status: Status | None, stage: str) -> str | None:
         reason = "parked in an earlier run; see the branch log"

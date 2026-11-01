@@ -23,8 +23,10 @@ from kit.loop.driver import (
 )
 import pytest
 
+from kit.errors import KitError
 from kit.loop.ledger import StageEntry, StopEntry, read_ledger
 from kit.loop.prs import ATTRIBUTION, Pr, parse_park_body
+from kit.loop.requests import REQUESTS_FILE, REQUESTS_HEADING, RequestRecord, read_requests
 from kit.loop.state import Status, read_status, write_status
 from kit.loop.stream import Usage
 
@@ -49,8 +51,10 @@ def result(text: str, is_error: bool = False, api: int | None = None) -> str:
     return json.dumps({"type": "result", "is_error": is_error, "api_error_status": api, "result": text})
 
 
-def step(text: str = "LOOP: ok", five: float = 0.1, commit: bool = True, opens: bool = False, raw=None) -> dict:
-    return {"lines": raw or [rate(five), result(text)], "commit": commit, "opens": opens}
+def step(
+    text: str = "LOOP: ok", five: float = 0.1, commit: bool = True, opens: bool = False, raw=None, requests=None
+) -> dict:
+    return {"lines": raw or [rate(five), result(text)], "commit": commit, "opens": opens, "requests": requests or {}}
 
 
 def fail_step() -> dict:
@@ -74,8 +78,14 @@ class FakeEnv:
         now: Callable[[], datetime] | None = None,
         saturday_after: str | None = None,
         weekend_ok: bool = False,
+        request_targets: tuple[str, ...] = (),
     ):
         self.worktree = tmp_path / "wt"
+        self.request_targets = request_targets
+        self.request_error = ""
+        self.request_raises: Exception | None = None
+        self.filed: list[tuple[str, str]] = []
+        self.prompts: dict[str, list[str]] = {}
         self.runtime = tmp_path / "runtime"
         self.worktree.mkdir(parents=True, exist_ok=True)
         self.today = "2026-10-17"
@@ -111,9 +121,12 @@ class FakeEnv:
 
     def claude(self, stage: str, text: str) -> list[str]:
         self.stages.append(stage)
+        self.prompts.setdefault(stage, []).append(text)
         self.trace.append(f"claude:{stage}")
         queue = self.scripts.get(stage)
         s = queue.pop(0) if queue else step(raw=[result("unscripted stage", True)], commit=False)
+        for name, content in s.get("requests", {}).items():
+            (self.requests_dir / name).write_text(content)
         self.head += s["commit"]
         if s["opens"]:
             self.add_pr()
@@ -123,6 +136,20 @@ class FakeEnv:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(self.spec_text)
         return s["lines"]
+
+    @property
+    def requests_dir(self) -> Path:
+        return self.runtime / "scratch" / "requests"
+
+    def file_request(self, path: Path, branch: str) -> RequestRecord:
+        text = path.read_text()
+        self.filed.append((text, branch))
+        if self.request_raises:
+            raise self.request_raises
+        title = next(line[4:] for line in text.splitlines() if line.startswith("### "))
+        if self.request_error:
+            return RequestRecord("investment", title, error=self.request_error)
+        return RequestRecord("investment", title, url=f"https://x/req/{len(self.filed)}")
 
     def clock(self) -> datetime:
         if self.now_fn:
@@ -220,6 +247,8 @@ class FakeEnv:
             config=self.config,
             test_command="uv run pytest -q",
             repo_name="demo",
+            request_targets=self.request_targets,
+            file_request=self.file_request if self.request_targets else None,
         )
 
     def lines(self) -> list[str]:
@@ -237,7 +266,7 @@ def env_with(config: LoopConfig, runtime: Path = Path("/runtime")) -> Env:
     fake = FakeEnv.__new__(FakeEnv)
     fake.runtime, fake.worktree, fake.today, fake.config = runtime, Path("/wt"), "2026-10-17", config
     fake.now_fn, fake.saturday_after, fake.weekend_ok = None, None, False
-    fake.notices, fake.logs = [], []
+    fake.notices, fake.logs, fake.request_targets = [], [], ()
     return fake.env()
 
 
@@ -257,6 +286,8 @@ def run_fake(
     now: Callable[[], datetime] | None = None,
     saturday_after: str | None = None,
     weekend_ok: bool = False,
+    request_targets: tuple[str, ...] = (),
+    setup: Callable[[FakeEnv], None] | None = None,
     **stages,
 ):
     """Run the loop; resume_branch starts it on a live branch at `stage`, holding the open_prs given as gh rows."""
@@ -273,7 +304,10 @@ def run_fake(
         now=now,
         saturday_after=saturday_after,
         weekend_ok=weekend_ok,
+        request_targets=request_targets,
     )
+    if setup:
+        setup(f)
     if resume_branch:
         f.tips[resume_branch] = json.dumps({"stage": stage})
         resume_status(f, stage)
@@ -892,3 +926,175 @@ def test_every_working_stage_says_one_bash_command_per_call_and_edit_files_with_
     for stage in ("spec", "plan", "build", "pr"):
         text = render(stage, env_with(LoopConfig("main")))
         assert "one Bash command per call" in text and "`sed`" in text and "never `git -C`" in text
+
+
+FIX_REQUEST = "Target: investment\n### Fix\n"
+
+
+def item_with_request(tmp_path, stage: str = "spec", setup=None, **more):
+    """A full item whose `stage` session writes one request file a.md."""
+    stages = {"spec": [step()], "plan": [step()], "build": [step()], "pr": [step(commit=False, opens=True)]}
+    first = stages[stage][0]
+    stages[stage] = [{**first, "requests": {"a.md": FIX_REQUEST}}]
+    return run_fake(tmp_path, request_targets=("investment",), setup=setup, **{**stages, **more})
+
+
+def test_rules_name_the_requests_dir_and_targets_only_when_set(tmp_path):
+    env = replace(env_with(LoopConfig("develop")), request_targets=("investment",))
+    text = render("build", env)
+    assert "/runtime/scratch/requests" in text and "`Target: <repo>`" in text and "(one of `investment`)" in text
+    assert "Never write to the other repo" in text and "`LOOP: park`" in text
+    assert "Target:" not in render("build", env_with(LoopConfig("develop")))
+
+
+def test_request_files_written_by_a_stage_are_filed_logged_and_deleted(tmp_path):
+    reason, f = item_with_request(tmp_path)
+    assert reason == "done"
+    assert f.filed == [(FIX_REQUEST, "loop/row-a")]
+    assert not any(f.requests_dir.iterdir())
+    assert read_requests(f.runtime, "loop/row-a") == [RequestRecord("investment", "Fix", url="https://x/req/1")]
+    assert "loop/row-a spec request - filed on investment: Fix: https://x/req/1" in f.logs
+
+
+def test_request_files_are_filed_in_sorted_order_and_other_files_left_alone(tmp_path):
+    def files(f: FakeEnv) -> None:
+        f.requests_dir.mkdir(parents=True)
+        (f.requests_dir / "notes.txt").write_text("keep")
+
+    two = {"b.md": "Target: investment\n### B\n", "a.md": "Target: investment\n### A\n"}
+    reason, f = run_fake(
+        tmp_path, request_targets=("investment",), setup=files, spec=[step(requests=two)], plan=[step("LOOP: park x")]
+    )
+    assert [t for t, _ in f.filed] == [two["a.md"], two["b.md"]]
+    assert [p.name for p in f.requests_dir.iterdir()] == ["notes.txt"]
+
+
+def test_a_failed_request_does_not_fail_the_stage(tmp_path):
+    reason, f = item_with_request(tmp_path, setup=lambda f: setattr(f, "request_error", "refused"))
+    assert reason == "done" and "pr" in f.stages and f.notices == []
+    assert read_requests(f.runtime, "loop/row-a")[0].error == "refused"
+    assert not any(f.requests_dir.iterdir())
+
+
+def test_a_raising_file_request_becomes_an_error_record_and_the_file_is_deleted(tmp_path):
+    reason, f = item_with_request(tmp_path, setup=lambda f: setattr(f, "request_raises", KitError("push failed\nmore")))
+    assert reason == "done" and "pr" in f.stages
+    assert read_requests(f.runtime, "loop/row-a") == [RequestRecord("unknown", "a.md", error="push failed")]
+    assert not any(f.requests_dir.iterdir())
+
+
+def test_a_malformed_requests_log_is_logged_and_does_not_fail_the_loop(tmp_path):
+    def broken(f: FakeEnv) -> None:
+        f.runtime.mkdir(parents=True)
+        (f.runtime / REQUESTS_FILE).write_text("{not json")
+
+    reason, f = item_with_request(tmp_path, stage="plan", setup=broken, plan=[{**step("LOOP: park x"), "requests": {"a.md": FIX_REQUEST}}])
+    assert reason == "done" and f.notices == []
+    assert any("requests log" in m and "not valid JSON" in m for m in f.logs)
+    (draft,) = f.drafts()
+    assert REQUESTS_HEADING not in draft[draft.index("--body") + 1]
+    assert not any(f.requests_dir.iterdir())
+
+
+def test_no_file_request_leaves_request_files_alone(tmp_path):
+    reason, f = run_fake(tmp_path, spec=[step()], plan=[step("LOOP: park x")])
+    assert not f.requests_dir.exists() and f.filed == []
+
+
+def test_pr_prompt_carries_requests_filed_and_requested_by(tmp_path):
+    def roadmap(f: FakeEnv) -> None:
+        (f.worktree / "docs").mkdir()
+        (f.worktree / "docs" / "roadmap.md").write_text("### Row A\n- Status: active\n- Requested by: dividend-growth\n")
+
+    reason, f = item_with_request(tmp_path, setup=roadmap)
+    (pr_prompt,) = f.prompts["pr"]
+    assert "Requested by: `dividend-growth`" in pr_prompt and "Requested by dividend-growth: after merging" in pr_prompt
+    assert "- filed on investment: Fix: https://x/req/1" in pr_prompt
+
+
+def test_pr_prompt_defaults_without_requests_or_roadmap(tmp_path):
+    reason, f = full_item(tmp_path)
+    (pr_prompt,) = f.prompts["pr"]
+    assert "Requested by: ``" in pr_prompt and "{" not in pr_prompt
+
+
+def test_requests_filed_during_the_pr_stage_are_commented_on_the_pr(tmp_path):
+    reason, f = item_with_request(tmp_path, stage="pr")
+    (comment,) = [c for c in f.comments() if c[c.index("--body-file") + 1].endswith("requests-comment.md")]
+    assert comment[3] == "1"
+    body = (f.runtime / "requests-comment.md").read_text()
+    assert REQUESTS_HEADING in body and "- filed on investment: Fix: https://x/req/1" in body
+
+
+def test_a_failed_request_comment_is_logged_and_does_not_fail_the_stage(tmp_path):
+    reason, f = item_with_request(tmp_path, stage="pr", setup=lambda f: setattr(f, "fail_on", "gh pr comment 1 --body-file"))
+    assert reason == "done" and any("request comment failed" in m for m in f.logs)
+
+
+def test_requests_filed_before_the_pr_stage_are_not_commented(tmp_path):
+    reason, f = item_with_request(tmp_path)
+    assert not (f.runtime / "requests-comment.md").exists()
+
+
+def test_parked_draft_lists_the_requests(tmp_path):
+    reason, f = item_with_request(tmp_path, stage="plan", plan=[{**step("LOOP: park needs Fix"), "requests": {"a.md": FIX_REQUEST}}])
+    (draft,) = f.drafts()
+    body = draft[draft.index("--body") + 1]
+    assert "## Requests filed on other repos" in body and "https://x/req/1" in body
+
+
+def stage_alone(tmp_path, spec: dict) -> FakeEnv:
+    f = FakeEnv(tmp_path, {"spec": [spec]}, spec_text=None, request_targets=("investment",))
+    f.branch = "loop/row-a"
+    return f
+
+
+def test_requests_are_filed_on_their_branch_when_the_push_after_the_session_raises(tmp_path):
+    f = stage_alone(tmp_path, step(requests={"a.md": FIX_REQUEST}))
+    f.fail_on = "git push -u origin loop/row-a"
+    with pytest.raises(subprocess.CalledProcessError):
+        _Run(f.env(), Usage(0.1, 0.1)).step("spec", "loop/row-a", None)
+    assert f.filed == [(FIX_REQUEST, "loop/row-a")] and not any(f.requests_dir.iterdir())
+    assert read_requests(f.runtime, "loop/row-a") == [RequestRecord("investment", "Fix", url="https://x/req/1")]
+
+
+def test_requests_are_filed_on_their_branch_when_the_session_raises(tmp_path):
+    f = stage_alone(tmp_path, step(requests={"a.md": FIX_REQUEST}))
+    session = f.claude
+
+    def timed_out(stage: str, text: str) -> list[str]:
+        session(stage, text)
+        raise subprocess.TimeoutExpired(["claude"], 1)
+
+    f.claude = timed_out
+    with pytest.raises(subprocess.TimeoutExpired):
+        _Run(f.env(), Usage(0.1, 0.1)).step("spec", "loop/row-a", None)
+    assert read_requests(f.runtime, "loop/row-a") == [RequestRecord("investment", "Fix", url="https://x/req/1")]
+
+
+def test_rules_ask_for_one_md_file_per_item(tmp_path):
+    env = replace(env_with(LoopConfig("develop")), request_targets=("investment",))
+    assert "one `<name>.md` file per roadmap item" in render("build", env)
+
+
+def test_non_md_request_files_are_logged_and_left_in_place(tmp_path):
+    reason, f = run_fake(
+        tmp_path, request_targets=("investment",), spec=[step(requests={"fix.txt": FIX_REQUEST})], plan=[step("LOOP: park x")]
+    )
+    assert f.filed == [] and [p.name for p in f.requests_dir.iterdir()] == ["fix.txt"]
+    assert f"loop/row-a request file {f.requests_dir / 'fix.txt'} is not a .md file; left in place" in f.logs
+
+
+def test_pr_prompt_has_no_requests_section_without_request_targets(tmp_path):
+    reason, f = full_item(tmp_path)
+    (pr_prompt,) = f.prompts["pr"]
+    assert "Requests filed on other repos" not in pr_prompt and "- none" not in pr_prompt
+    assert "links to the spec and plan, and as the last line" in pr_prompt
+
+
+def test_pr_prompt_has_the_requests_section_with_request_targets_and_none_filed(tmp_path):
+    reason, f = run_fake(
+        tmp_path, request_targets=("investment",), spec=[step()], plan=[step()], build=[step()], pr=[step(commit=False, opens=True)]
+    )
+    (pr_prompt,) = f.prompts["pr"]
+    assert 'a section "Requests filed on other repos" containing these lines verbatim:\n- none\n   and as the last line' in pr_prompt

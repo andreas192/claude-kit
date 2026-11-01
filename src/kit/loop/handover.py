@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kit.kitfile import parse_kitfile
+from kit.errors import KitError
+from kit.gitrun import Runner
+from kit.kitfile import KITFILE, parse_kitfile
 from kit.snapshot import parse_version
 
 
@@ -23,3 +25,20 @@ def handover_target(latest: str | None, running: str, kit_home: Path) -> Path | 
         return None
     src = snapshot_src(kit_home, latest)
     return src if (src / "kit" / "cli.py").is_file() else None
+
+
+def origin_latest(repo: Path, base_branch: str, runner: Runner) -> str:
+    """The latest applied kit version in .claude/kit.json on origin/<base_branch>, after a fetch."""
+    ref = f"origin/{base_branch}:{KITFILE.as_posix()}"
+    runner(["git", "fetch", "origin"], repo)
+    try:
+        text = runner(["git", "show", ref], repo)
+    except KitError as error:
+        raise KitError(f"no {KITFILE.as_posix()} on origin/{base_branch}") from error
+    try:
+        latest = latest_applied(text)
+    except (ValueError, KeyError, TypeError, AttributeError, KitError) as error:
+        raise KitError(f"{ref} is not valid: {error}") from error
+    if latest is None:
+        raise KitError(f"{ref} has no applied version")
+    return latest

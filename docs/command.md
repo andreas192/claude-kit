@@ -19,6 +19,7 @@ uv run --project ~/Projects/Personal/claude-kit kit loop install <repo> [--launc
 uv run --project ~/Projects/Personal/claude-kit kit loop uninstall <repo> [--launch-agents DIR] [--no-launchctl] [--kit-home DIR]
 uv run --project ~/Projects/Personal/claude-kit kit loop status <repo> [--no-launchctl] [--kit-home DIR]
 uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key> [--kit-home DIR]
+uv run --project ~/Projects/Personal/claude-kit kit request <requester-repo> <target-repo> <request-file> [--kit-home DIR]
 uv run --project ~/Projects/Personal/claude-kit kit insights run [--base DIR] [--weeks 6] [--no-advise] [--notify] [--kit-home DIR] [--root DIR]
 uv run --project ~/Projects/Personal/claude-kit kit insights install|uninstall [--base DIR] [--launch-agents DIR] [--no-launchctl] [--kit-home DIR]
 ```
@@ -36,6 +37,7 @@ It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<versio
 - `loop run`: one loop run in the foreground. `--pick-only` prints the pick and stops. `--weekend-ok` lets it run on Saturday or Sunday.
 - `loop install|uninstall`: write or remove `com.kit.loop.<repo-name>.plist` and load or unload it with `launchctl`. `--no-launchctl` only writes the file.
 - `loop status`: launchd state and the last 20 lines of `loop.log`.
+- `request <requester-repo> <target-repo> <request-file>`: files a roadmap request on another repo as a PR and prints its URL. The request file holds an optional `Target: <repo>` line, a `### <title>` heading, optional `- Field: value` lines and a body. The item lands as `Status: owner` in `## Requests` of the target's `docs/roadmap.md` (`Status`, `Blocked by`, `Requested by` and `Depends on` from the file are replaced or dropped). Only targets listed in the requester's `requests.targets` that run kit v0.4.0 or later are accepted. It writes nothing in the requester; in the target it uses a temporary worktree under `<kit-home>/requests/` and never touches the target's checkout.
 - `--kit-home DIR` defaults to `~/.claude/kit`.
 - `loop run --no-handover` is internal: the driver passes it when it re-executes into a newer snapshot.
 

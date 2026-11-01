@@ -10,10 +10,13 @@ from kit.detect import FLAGS, ask_with_default
 from kit.errors import KitError
 from kit.gitrun import run
 from kit.insights_cmd import insights_command
+from kit.kitfile import read_kitfile, require_requests
 from kit.loop.pick import pick
 from kit.loop_cmd import DEFAULT_AGENTS, fetch_prs, loop_command, remote_loop_branches
 from kit.migrate import load_known
-from kit.roadmap import read_roadmap
+from kit.request import allowed_target
+from kit.request_cmd import file_request, read_request_file
+from kit.roadmap import read_roadmap, requester_roadmaps
 from kit.roadmap_report import format_report
 from kit.snapshot import latest_tag
 from kit.status import find_kit_repos, status_lines
@@ -49,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--root", type=Path, default=PROJECTS_ROOT)
     roadmap = subparsers.add_parser("roadmap", help="validate docs/roadmap.md and show what the loop would pick")
     roadmap.add_argument("repo", type=Path)
+    request = subparsers.add_parser("request", help="file a roadmap request on another repo as a PR")
+    request.add_argument("requester", type=Path)
+    request.add_argument("target", type=Path)
+    request.add_argument("request_file", type=Path)
+    request.add_argument("--kit-home", type=Path, default=KIT_HOME)
     add_loop_parser(subparsers)
     add_insights_parser(subparsers)
     return parser
@@ -122,7 +130,16 @@ def roadmap_command(args: argparse.Namespace) -> int:
     roadmap = read_roadmap(repo)
     prs, gh_error = fetch_prs(repo, run)
     result = pick(roadmap, remote_loop_branches(repo, run), prs) if prs is not None else None
-    print(format_report(roadmap, result, prs, gh_error), end="")
+    print(format_report(roadmap, result, prs, gh_error, requester_roadmaps(repo, roadmap)), end="")
+    return 0
+
+
+def request_command(args: argparse.Namespace) -> int:
+    requester = args.requester.resolve()
+    config = require_requests(read_kitfile(requester), requester)
+    target = allowed_target(requester, config.targets, args.target)
+    filed = file_request(requester, target, read_request_file(args.request_file), args.kit_home, run)
+    print(filed.url)
     return 0
 
 
@@ -131,6 +148,7 @@ COMMANDS = {
     "bench": bench_command,
     "insights": insights_command,
     "loop": loop_command,
+    "request": request_command,
     "roadmap": roadmap_command,
     "status": status_command,
 }

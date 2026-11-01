@@ -6,11 +6,11 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from builders import GOOD, add_loop_package, commit, git, tag
+from builders import GOOD, add_loop_package, commit, git, init_origin, tag
 
 from kit.errors import KitError
 from kit.gitrun import run
-from kit.kitfile import Apply, KitFile, LoopConfig, write_kitfile
+from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, write_kitfile
 from kit.loop.driver import Env
 from kit.loop.state import Status, write_status
 from kit.loop_cmd import (
@@ -19,11 +19,11 @@ from kit.loop_cmd import (
     handover_command,
     install,
     loop_path,
-    origin_latest,
     pending_handover,
     program,
     read_extra,
     remote_loop_branches,
+    request_hooks,
     require_loop,
     resume,
     runtime_dir,
@@ -35,19 +35,6 @@ from kit.loop_cmd import (
 
 QUESTIONS_SPEC = "# Spec\n\n## Questions for the owner\n\n- Which basis?\n\n## Calls made for the owner\n\n- X. Rejected: Y.\n"
 ANSWERED_SPEC = "# Spec\n\n## Questions for the owner\n\n## Calls made for the owner\n\n- X. Rejected: Y.\n"
-
-
-def init_origin(tmp_path: Path) -> tuple[Path, Path]:
-    """A bare origin and a clone with one commit on main (docs/roadmap.md and .claude/kit.json)."""
-    origin, repo = tmp_path / "origin.git", tmp_path / "repo"
-    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
-    subprocess.run(["git", "clone", str(origin), str(repo)], check=True, capture_output=True)
-    for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
-        git(repo, "config", key, value)
-    write_kitfile(repo, KitFile("pytest", (Apply("v0.2.0", "abc", "2026-10-20T00:00:00Z"),), LoopConfig("main")))
-    commit(repo, {"docs/roadmap.md": GOOD}, "init", "2026-10-20T10:00:00Z")
-    git(repo, "push", "-u", "origin", "main")
-    return origin, repo
 
 
 def loop_branch(repo: Path, key: str, spec: str, stage: str) -> Path:
@@ -151,28 +138,6 @@ def test_fetch_prs_when_gh_fails_keeps_stderr_reason():
 
 def test_fetch_prs_when_gh_prints_garbage():
     assert fetch_prs(Path("/r"), lambda cmd, cwd: "oops") == (None, "unreadable output")
-
-
-def test_origin_latest_reads_kit_json_from_origin_base(tmp_path):
-    _, repo = init_origin(tmp_path)
-    assert origin_latest(repo, "main", run) == "v0.2.0"
-
-
-def test_origin_latest_without_kit_json_on_origin(tmp_path):
-    origin, repo = init_origin(tmp_path)
-    git(repo, "rm", "-q", ".claude/kit.json")
-    git(repo, "commit", "-m", "drop")
-    git(repo, "push")
-    with pytest.raises(KitError, match="no .claude/kit.json on origin/main"):
-        origin_latest(repo, "main", run)
-
-
-def test_origin_latest_with_malformed_json(tmp_path):
-    _, repo = init_origin(tmp_path)
-    commit(repo, {".claude/kit.json": "{oops"}, "break", "2026-10-21T10:00:00Z")
-    git(repo, "push")
-    with pytest.raises(KitError, match="origin/main:.claude/kit.json is not valid"):
-        origin_latest(repo, "main", run)
 
 
 def test_handover_command_runs_the_cli_module_with_the_flags(tmp_path):
@@ -430,3 +395,21 @@ def test_status_lines_say_when_the_agent_is_not_loaded_and_there_is_no_log(tmp_p
 
     lines = status_lines(tmp_path / "demo", tmp_path, not_loaded)
     assert lines[0].startswith("launchd: com.kit.loop.demo not loaded") and lines[1] == "no loop.log yet"
+
+
+def test_request_hooks_are_empty_without_requests_targets(tmp_path):
+    for requests in (None, RequestsConfig(())):
+        hooks = request_hooks(tmp_path / "dg", requests, tmp_path / "kit", run)
+        assert hooks.targets == () and hooks.file_request is None
+
+
+def test_request_hooks_name_the_targets_and_file_through_file_request_file(tmp_path):
+    repo = tmp_path / "dividend-growth"
+    repo.mkdir()
+    hooks = request_hooks(repo, RequestsConfig(("../investment",)), tmp_path / "kit", run)
+    assert hooks.targets == ("investment",)
+    request = tmp_path / "a.md"
+    request.write_text("Target: elsewhere\n### Fix\n")
+    record = hooks.file_request(request, "loop/row-a")
+    assert (record.target, record.title, record.url) == ("elsewhere", "Fix", "")
+    assert "'elsewhere' is not in requests.targets" in record.error

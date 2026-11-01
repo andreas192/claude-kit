@@ -12,6 +12,7 @@ from kit.migrate import (
     CANDIDATES,
     Migration,
     apply_migration,
+    isolation_notes,
     load_known,
     loop_notes,
     plan_migration,
@@ -173,3 +174,25 @@ def test_loop_notes_are_empty_for_a_repo_without_a_loop():
 
 def test_loop_notes_skip_the_section_hint_when_the_section_exists():
     assert loop_notes(True, [], True, Path("/r/app")) == ["after merging, run kit loop install /r/app"]
+
+
+def test_isolation_notes_flag_an_unqualified_never_write_line(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("# X\n\n- Never write to `../investment` from here.\n")
+    assert isolation_notes(tmp_path, ("../investment",)) == [
+        'CLAUDE.md:3: add "except a roadmap request through kit request"'
+    ]
+
+
+def test_isolation_notes_skip_qualified_lines_and_no_targets(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("Never write to ../investment, except a roadmap request through `kit request`.\n")
+    assert isolation_notes(tmp_path, ("../investment",)) == []
+    assert isolation_notes(tmp_path, ()) == []
+
+
+def test_isolation_notes_are_empty_without_a_claude_md(tmp_path):
+    assert isolation_notes(tmp_path, ("../investment",)) == []
+
+
+def test_isolation_notes_ignore_lines_about_other_directories(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("Never write to ../capital-trading.\n")
+    assert isolation_notes(tmp_path, ("../investment",)) == []

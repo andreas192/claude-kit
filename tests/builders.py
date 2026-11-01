@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from kit.bench.transcripts import Call, Session, Subagent, Transcript
+from kit.kitfile import Apply, KitFile, LoopConfig, write_kitfile
 
 
 def rec(timestamp: str) -> str:
@@ -128,3 +129,39 @@ Body text.
 - Status: done
 - Spec: docs/superpowers/specs/2026-10-18-dividend-pay-dates-and-calendar-design.md
 """
+
+
+def init_origin(tmp_path: Path) -> tuple[Path, Path]:
+    """A bare origin and a clone with one commit on main (docs/roadmap.md and .claude/kit.json)."""
+    origin, repo = tmp_path / "origin.git", tmp_path / "repo"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", str(origin), str(repo)], check=True, capture_output=True)
+    for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        git(repo, "config", key, value)
+    write_kitfile(repo, KitFile("pytest", (Apply("v0.2.0", "abc", "2026-10-20T00:00:00Z"),), LoopConfig("main")))
+    commit(repo, {"docs/roadmap.md": GOOD}, "init", "2026-10-20T10:00:00Z")
+    git(repo, "push", "-u", "origin", "main")
+    return origin, repo
+
+
+REQUEST_ROADMAP = "## Now\n\n### A\n- Status: open\n"
+
+
+def request_kit_file(version: str = "v0.4.0", loop: LoopConfig | None = None) -> KitFile:
+    return KitFile("pytest", (Apply(version, "abc", "2026-10-28T00:00:00Z"),), loop)
+
+
+def init_request_pair(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A bare origin, a target clone `investment/` with kit.json and a roadmap on main, and a requester beside it."""
+    origin, target = tmp_path / "origin.git", tmp_path / "investment"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
+    subprocess.run(["git", "clone", str(origin), str(target)], check=True, capture_output=True)
+    for key, value in (("user.name", "t"), ("user.email", "t@example.com"), ("commit.gpgsign", "false")):
+        git(target, "config", key, value)
+    write_kitfile(target, request_kit_file())
+    commit(target, {"docs/roadmap.md": REQUEST_ROADMAP}, "init", "2026-10-28T10:00:00Z")
+    git(target, "push", "-u", "origin", "main")
+    git(target, "remote", "set-head", "origin", "-a")
+    requester = tmp_path / "dividend-growth"
+    requester.mkdir()
+    return requester, target, origin

@@ -1,4 +1,4 @@
-"""`.claude/kit.json`: the kit versions applied to a repo, in order, and the optional loop settings."""
+"""`.claude/kit.json`: the kit versions applied to a repo, in order, and the optional loop and requests settings."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from kit.errors import KitError
 KITFILE = Path(".claude") / "kit.json"
 DEFAULT_INTERVAL_HOURS = 5
 LOOP_KEYS = frozenset({"base_branch", "forbidden_paths", "read_first", "pr_checklist", "interval_hours"})
+REQUESTS_KEYS = frozenset({"targets"})
 
 
 @dataclass(frozen=True)
@@ -32,10 +33,16 @@ class LoopConfig:
 
 
 @dataclass(frozen=True)
+class RequestsConfig:
+    targets: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class KitFile:
     test_command: str
     applies: tuple[Apply, ...]
     loop: LoopConfig | None = None
+    requests: RequestsConfig | None = None
 
 
 def parse_kitfile(text: str) -> KitFile:
@@ -43,7 +50,7 @@ def parse_kitfile(text: str) -> KitFile:
     applies = tuple(
         Apply(a["version"], a["commit"], a["applied_at"], tuple(a.get("overrides", ()))) for a in data["applies"]
     )
-    return KitFile(data["test_command"], applies, optional_loop(data))
+    return KitFile(data["test_command"], applies, optional_loop(data), optional_requests(data))
 
 
 def optional_loop(data: dict[str, Any]) -> LoopConfig | None:
@@ -70,10 +77,22 @@ def parse_loop(raw: dict[str, Any]) -> LoopConfig:
     )
 
 
-def string_tuple(raw: dict[str, Any], key: str) -> tuple[str, ...]:
+def optional_requests(data: dict[str, Any]) -> RequestsConfig | None:
+    if "requests" not in data:
+        return None
+    raw = data["requests"]
+    if not isinstance(raw, dict):
+        raise KitError("requests must be an object")
+    unknown = sorted(set(raw) - REQUESTS_KEYS)
+    if unknown:
+        raise KitError(f"requests has unknown key {unknown[0]!r}")
+    return RequestsConfig(string_tuple(raw, "targets", "requests"))
+
+
+def string_tuple(raw: dict[str, Any], key: str, section: str = "loop") -> tuple[str, ...]:
     value = raw.get(key, [])
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise KitError(f"loop.{key} must be a list of strings")
+        raise KitError(f"{section}.{key} must be a list of strings")
     return tuple(value)
 
 
@@ -96,10 +115,16 @@ def read_kitfile(repo: Path) -> KitFile | None:
         raise KitError(f"{path}: invalid kit.json: {reason}") from exc
 
 
+def require_requests(kit: KitFile | None, repo: Path) -> RequestsConfig:
+    if kit is None or kit.requests is None:
+        raise KitError(f"{repo / KITFILE} has no requests section")
+    return kit.requests
+
+
 def with_apply(kit: KitFile, apply: Apply) -> KitFile:
     if kit.applies and kit.applies[-1].version == apply.version:
         raise KitError(f"already on {apply.version}")
-    return KitFile(kit.test_command, (*kit.applies, apply), kit.loop)
+    return KitFile(kit.test_command, (*kit.applies, apply), kit.loop, kit.requests)
 
 
 def loop_json(loop: LoopConfig) -> dict[str, Any]:
@@ -116,4 +141,6 @@ def write_kitfile(repo: Path, kit: KitFile) -> None:
     }
     if kit.loop is not None:
         data["loop"] = loop_json(kit.loop)
+    if kit.requests is not None:
+        data["requests"] = {"targets": list(kit.requests.targets)}
     path.write_text(json.dumps(data, indent=2) + "\n")

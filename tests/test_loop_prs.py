@@ -2,7 +2,8 @@
 
 import json
 
-from kit.loop.prs import ParkNote, Pr, loop_prs, park_body, parse_park_body
+from kit.loop.prs import QUESTIONS_HEADING, ParkNote, Pr, loop_prs, park_body, parse_park_body
+from kit.loop.requests import REQUESTS_HEADING
 
 ATTRIBUTION = "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 
@@ -53,3 +54,14 @@ def test_parse_park_body_of_a_body_that_is_not_a_park_note_is_empty():
 def test_pr_defaults():
     pr = Pr(1, "loop/a", "OPEN", "2026-10-17", "u")
     assert (pr.title, pr.is_draft, pr.body) == ("", False, "")
+
+
+def test_park_body_lists_requests_before_questions_and_questions_still_parse():
+    body = park_body("needs fix", "s.md", "p.md", ["Q?"], ["- filed on investment: T: u"])
+    assert body.index(REQUESTS_HEADING) < body.index(QUESTIONS_HEADING)
+    assert f"{REQUESTS_HEADING}\n\n- filed on investment: T: u\n\n" in body
+    assert parse_park_body(body).questions == ("Q?",)
+
+
+def test_park_body_without_requests_has_no_requests_block():
+    assert REQUESTS_HEADING not in park_body("x", "", "", [])

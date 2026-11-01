@@ -10,11 +10,11 @@ from kit.errors import KitError
 
 ROADMAP_PATH = Path("docs") / "roadmap.md"
 STATUSES = ("open", "owner", "blocked", "active", "done", "dropped")
-FIELDS = ("Status", "Blocked by", "Depends on", "Spec", "Plan", "PR")
+FIELDS = ("Status", "Blocked by", "Depends on", "Spec", "Plan", "PR", "Requested by")
 NEEDS_BLOCKED_BY = ("owner", "blocked")
 KEY_MAX = 50
 
-_FIELD_LINE = re.compile(r"^- ([A-Za-z ]+):\s*(.*)$")
+FIELD_LINE = re.compile(r"^- ([A-Za-z ]+):\s*(.*)$")
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,7 @@ class Item:
     spec: str
     plan: str
     pr: str
+    requested_by: str
     line: int
 
 
@@ -82,7 +83,7 @@ def _blocks(text: str) -> list[_Block]:
 def _fields_after(lines: list[str], heading_number: int) -> tuple[tuple[str, str], ...]:
     fields = []
     for line in lines[heading_number:]:
-        found = _FIELD_LINE.match(line)
+        found = FIELD_LINE.match(line)
         if not found:
             break
         fields.append((found.group(1), found.group(2).strip()))
@@ -142,6 +143,7 @@ def _item(block: _Block) -> Item:
         spec=values.get("Spec", ""),
         plan=values.get("Plan", ""),
         pr=values.get("PR", ""),
+        requested_by=values.get("Requested by", ""),
         line=block.line,
     )
 
@@ -160,3 +162,15 @@ def read_roadmap(repo: Path) -> Roadmap:
     if not path.is_file():
         raise KitError(f"{path} not found")
     return parse_roadmap(path.read_text())
+
+
+def _sibling_roadmap(repo: Path, name: str) -> Roadmap | None:
+    try:
+        return read_roadmap(repo.parent / name)
+    except (KitError, OSError, UnicodeDecodeError):
+        return None
+
+
+def requester_roadmaps(repo: Path, roadmap: Roadmap) -> dict[str, Roadmap | None]:
+    names = sorted({item.requested_by for item in roadmap.items if item.status == "done" and item.requested_by})
+    return {name: _sibling_roadmap(repo, name) for name in names}

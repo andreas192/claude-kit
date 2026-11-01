@@ -17,6 +17,7 @@ from kit.migrate import (
     HOOK_SCRIPTS,
     OLD_LOOP_SCRIPT,
     apply_migration,
+    isolation_notes,
     loop_notes,
     plan_migration,
     prose_mentions,
@@ -82,12 +83,13 @@ def apply(
         require_passing(checks, branch)
     commit = gitops.commit_all(repo, f"chore: apply claude-kit {version}", run)
     recorded = Apply(version, commit, gitops.commit_time(repo, commit, run), migration.overrides)
-    write_kitfile(repo, with_apply(KitFile(resolved.test_command, kit.applies, kit.loop), recorded))
+    write_kitfile(repo, with_apply(KitFile(resolved.test_command, kit.applies, kit.loop, kit.requests), recorded))
     gitops.commit_all(repo, f"chore: record claude-kit {version}", run)
 
     had_loop = OLD_LOOP_SCRIPT in (*migration.remove, *migration.overrides)
     notes = loop_notes(had_loop, other_loop_agents(agents_dir, repo, loop_label(repo.name)), kit.loop is not None, repo)
-    prose = prose_outside(prose_mentions(repo, run), added)
+    targets = kit.requests.targets if kit.requests else ()
+    prose = [*prose_outside(prose_mentions(repo, run), added), *isolation_notes(repo, targets)]
     body = gitops.pr_body(version, migration, removed_hooks, added, prose, checks, roadmap_files(repo, run), notes)
     url = gitops.open_pr(repo, branch, f"chore: apply claude-kit {version}", body, run) if open_pr else None
     return ApplyResult(branch, commit, url, checks)

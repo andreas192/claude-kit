@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,6 +36,7 @@ HOOK_SCRIPTS = ("test-layer-guard.mjs", "context-warn.mjs")
 KNOWN_HASHES = Path(__file__).parent / "known_hashes.json"
 PROSE_PATTERN = "implementer-haiku|implementer-sonnet|reviewer-sonnet|test-layer-guard|context-warn|token_report|feature_loop|loop_prompts"
 ON_THE_KIT = ("kit:", "kit bench")
+REQUEST_EXCEPTION = "kit request"
 # git grep exits 1 when nothing matches; any other non-zero status is a real failure and still raises.
 # -I skips binary files; docs/superpowers holds specs and plans, which name these files as history, not as live prose.
 GREP_SCRIPT = (
@@ -76,6 +78,20 @@ def prose_mentions(repo: Path, run: Runner) -> list[str]:
 def prose_outside(hits: list[str], added: list[str]) -> list[str]:
     """Drop hits inside files this apply just added: the kit wrote that prose, the owner has nothing to edit."""
     return [hit for hit in hits if hit.rsplit(":", 1)[0] not in added]
+
+
+def isolation_notes(repo: Path, targets: tuple[str, ...]) -> list[str]:
+    """CLAUDE.md lines that forbid writing to a request target without naming `kit request`."""
+    path = repo / "CLAUDE.md"
+    if not targets or not path.is_file():
+        return []
+    names = "|".join(re.escape(Path(target).name) for target in targets)
+    forbids = re.compile(rf"never write to\s+`?(\.\./)?({names})\b", re.IGNORECASE)
+    return [
+        f'CLAUDE.md:{number}: add "except a roadmap request through kit request"'
+        for number, line in enumerate(path.read_text().splitlines(), start=1)
+        if forbids.search(line) and REQUEST_EXCEPTION not in line
+    ]
 
 
 def roadmap_files(repo: Path, run: Runner) -> list[str]:
