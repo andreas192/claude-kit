@@ -168,10 +168,18 @@ def pr_url(out: str) -> str:
     return lines[-1].strip()
 
 
+def require_only_roadmap(worktree: Path, base: str, run: Runner) -> None:
+    """The target's hooks run on commit; refuse a request commit that ended up changing any other file."""
+    changed = run(["git", "diff", "--name-only", f"origin/{base}..HEAD"], worktree).split()
+    if changed != [ROADMAP_PATH.as_posix()]:
+        raise KitError(f"the request commit changes more than {ROADMAP_PATH.as_posix()}: {', '.join(changed) or 'nothing'}")
+
+
 def commit_and_open_pr(worktree: Path, base: str, key: str, text: str, message: str, title: str, body: str, run: Runner) -> str:
     (worktree / ROADMAP_PATH).write_text(text)
     run(["git", "add", ROADMAP_PATH.as_posix()], worktree)
     run_labelled(run, ["git", "commit", "-m", message], worktree, "git commit")
+    require_only_roadmap(worktree, base, run)
     branch = request_branch(key)
     run(["git", "push", "-u", "origin", branch], worktree)
     create = ["gh", "pr", "create", "--base", base, "--head", branch, "--title", title, "--body", body]

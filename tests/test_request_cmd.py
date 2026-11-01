@@ -105,6 +105,17 @@ def test_a_failed_push_still_removes_worktree_and_branch(pair, tmp_path):
     assert "request/" not in run(["git", "branch", "--list"], origin)
 
 
+def test_a_hook_that_commits_another_file_is_refused_before_the_push(pair, tmp_path):
+    requester, target, origin = pair
+    hook = target / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho x > extra.txt\ngit add extra.txt\n")
+    hook.chmod(0o755)
+    with pytest.raises(KitError, match=r"^the request commit changes more than docs/roadmap.md: docs/roadmap.md, extra.txt$"):
+        file_request(requester, target, parse_request(REQ), tmp_path / "kit", gh := gh_fake())
+    assert_no_request_left(target, tmp_path / "kit")
+    assert "request/" not in run(["git", "branch", "--list"], origin) and gh.calls[-1][:3] != ["gh", "pr", "create"]
+
+
 def test_a_failed_pr_create_still_removes_worktree_and_branch(pair, tmp_path):
     requester, target, _ = pair
     with pytest.raises(KitError, match=r"^gh pr create --head request/fix-fx-rates failed: refused$"):
