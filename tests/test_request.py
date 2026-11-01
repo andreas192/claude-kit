@@ -33,12 +33,20 @@ def test_parse_request_without_target_line():
     assert parse_request("### A\n\nbody\n").target == ""
 
 
+def test_parse_request_skips_leading_blank_lines_before_target():
+    r = parse_request("\n  \nTarget: investment\n\n### A\n")
+    assert (r.target, r.title) == ("investment", "A")
+
+
 @pytest.mark.parametrize(
     "text, message",
     [
         ("just text\n", "no ### item"),
         ("### A\n\n### B\n", "exactly one ### item"),
         ("## Section\n### A\n", "no ## section"),
+        ("Target: investment\nplease fix\n### A\n", "text before the ### item"),
+        ("Target: investment\n### !!!\n", "no letters or digits"),
+        ("Target: investment\n### Øæ ß\n", "no letters or digits"),
     ],
 )
 def test_parse_request_rejects(text, message):
@@ -98,7 +106,7 @@ def test_target_by_name(tmp_path):
     assert target_by_name(tmp_path / "dg", ("../investment",), "investment") == (tmp_path / "investment").resolve()
     with pytest.raises(KitError, match="'capital-trading' is not in requests.targets"):
         target_by_name(tmp_path / "dg", ("../investment",), "capital-trading")
-    with pytest.raises(KitError, match="no Target: line"):
+    with pytest.raises(KitError, match=r"^the request has no Target: line; add a first line `Target: <repo>`$"):
         target_by_name(tmp_path / "dg", ("../investment",), "")
 
 

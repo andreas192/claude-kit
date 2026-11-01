@@ -32,8 +32,9 @@ class Request:
 
 def _split_target(text: str) -> tuple[str, list[str]]:
     lines = text.splitlines()
-    if lines and lines[0].startswith(TARGET_PREFIX):
-        return lines[0][len(TARGET_PREFIX) :].strip(), lines[1:]
+    first = next((number for number, line in enumerate(lines) if line.strip()), len(lines))
+    if first < len(lines) and lines[first].startswith(TARGET_PREFIX):
+        return lines[first][len(TARGET_PREFIX) :].strip(), lines[first + 1 :]
     return "", lines
 
 
@@ -45,6 +46,8 @@ def _only_heading(lines: list[str]) -> int:
         raise RequestError("a request has no ### item")
     if len(headings) > 1:
         raise RequestError("a request has exactly one ### item")
+    if any(line.strip() for line in lines[: headings[0]]):
+        raise RequestError("a request has text before the ### item; put it in the item's body")
     return headings[0]
 
 
@@ -63,8 +66,11 @@ def parse_request(text: str) -> Request:
     target, lines = _split_target(text)
     heading = _only_heading(lines)
     title = lines[heading][4:].strip()
+    key = item_key(title)
+    if not key:
+        raise RequestError(f"the ### title {title!r} has no letters or digits to name its branch")
     fields, body = _fields_and_body(lines[heading + 1 :])
-    return Request(target, title, item_key(title), fields, body)
+    return Request(target, title, key, fields, body)
 
 
 def filed_item(request: Request, requester: str) -> str:
@@ -118,7 +124,7 @@ def allowed_target(repo: Path, targets: tuple[str, ...], target: Path) -> Path:
 
 def target_by_name(repo: Path, targets: tuple[str, ...], name: str) -> Path:
     if not name:
-        raise KitError("the request has no Target: line; pass --target or add one")
+        raise KitError("the request has no Target: line; add a first line `Target: <repo>`")
     found = next((path for path in _resolved_targets(repo, targets) if path.name == name), None)
     if found is None:
         raise KitError(f"{name!r} is not in requests.targets")
