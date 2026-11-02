@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `kit loop run` and `kit loop resume` add the loop worktree (`/.claude/worktrees/feature-loop/`) to the repo's local `.git/info/exclude`, even when the worktree already exists. An untracked worktree used to make `kit apply` and `scripts/apply-kit.sh` refuse the repo as dirty, as in investment, whose `.gitignore` doesn't list it.
+
 ## v0.4.0 — 2026-11-01
 
 Cross-repo roadmap requests.
