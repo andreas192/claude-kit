@@ -19,6 +19,7 @@ from kit.loop_cmd import (
     handover_command,
     install,
     loop_path,
+    loop_plugin_dir,
     pending_handover,
     program,
     read_extra,
@@ -379,6 +380,13 @@ def test_write_settings_merges_extra_forbidden_paths_and_the_scratch_dir(tmp_pat
     assert "Bash(uv run dgi *)" in permissions["allow"] and "Bash(uv run pytest -q*)" in permissions["allow"]
     assert f"Edit(/{scratch.resolve()}/**)" in permissions["allow"]
     assert f"Edit(/{(repo / '../investment').resolve()}/**)" in permissions["deny"]
+
+
+def test_loop_plugin_dir_is_the_snapshot_plugin_of_the_running_version_or_none(tmp_path):
+    plugin = tmp_path / "v0.4.1" / "plugins" / "kit"
+    assert loop_plugin_dir(tmp_path, "v0.4.1") is None
+    plugin.mkdir(parents=True)
+    assert loop_plugin_dir(tmp_path, "v0.4.1") == plugin
 
 
 def test_scratch_dir_is_per_repo_resolved_and_outside_the_protected_claude_dir(tmp_path):

@@ -28,7 +28,7 @@ from kit.loop.ledger import StageEntry, StopEntry, read_ledger
 from kit.loop.prs import ATTRIBUTION, Pr, parse_park_body
 from kit.loop.requests import REQUESTS_FILE, REQUESTS_HEADING, RequestRecord, read_requests
 from kit.loop.state import Status, read_status, write_status
-from kit.loop.stream import Usage
+from kit.loop.stream import KIT_AGENTS, Usage
 
 ROADMAP_A_OPEN = "### Row A\n- Status: open\n"
 ROADMAP_A_AND_B_OPEN = "### Row A\n- Status: open\n\n### Row B\n- Status: open\n"
@@ -51,10 +51,14 @@ def result(text: str, is_error: bool = False, api: int | None = None) -> str:
     return json.dumps({"type": "result", "is_error": is_error, "api_error_status": api, "result": text})
 
 
+def init(agents=KIT_AGENTS) -> str:
+    return json.dumps({"type": "system", "subtype": "init", "agents": ["Explore", *agents]})
+
+
 def step(
     text: str = "LOOP: ok", five: float = 0.1, commit: bool = True, opens: bool = False, raw=None, requests=None
 ) -> dict:
-    return {"lines": raw or [rate(five), result(text)], "commit": commit, "opens": opens, "requests": requests or {}}
+    return {"lines": raw or [init(), rate(five), result(text)], "commit": commit, "opens": opens, "requests": requests or {}}
 
 
 def fail_step() -> dict:
@@ -741,8 +745,15 @@ def test_probe_error_is_an_env_failure_with_detail_and_one_notice(tmp_path):
 
 
 def test_probe_without_usage_is_an_env_failure(tmp_path):
-    f = FakeEnv(tmp_path, {"probe": [step(raw=[result("LOOP: ok")], commit=False)]})
+    f = FakeEnv(tmp_path, {"probe": [step(raw=[init(), result("LOOP: ok")], commit=False)]})
     assert run(f.env()) == "env" and len(f.notices) == 1
+
+
+def test_probe_without_the_kit_agents_stops_before_any_stage_and_names_them(tmp_path):
+    f = FakeEnv(tmp_path, scripts(probe=[step(raw=[init(["kit:implementer-haiku"]), rate(0.1), result("LOOP: ok")], commit=False)]))
+    assert run(f.env()) == "env" and f.stages == ["probe"] and f.cmds == []
+    assert len(f.notices) == 1 and "kit:reviewer-sonnet" in f.notices[0]
+    assert any("kit:implementer-sonnet" in m for m in f.logs)
 
 
 def test_guarded_logs_a_crash_notifies_and_returns_1(tmp_path):

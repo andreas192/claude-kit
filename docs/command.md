@@ -57,6 +57,8 @@ Runtime files live in `~/.claude/kit/loop/<repo-name>/`, never in the repo:
 
 The PR stage session writes its PR body to `pr-body.md` in `<temp dir>/kit-loop/<repo-name>/`, not in the runtime dir: `~/.claude/` is protected in don't-ask mode, and a file outside the checkout is writable only through an `Edit(//<abs path>/**)` rule (a `Write(...)` rule there grants nothing).
 
+Each `claude -p` session loads the kit plugin with `--plugin-dir ~/.claude/kit/<running version>/plugins/kit`. `-p` never registers the marketplace that `kit apply` declares in `.claude/settings.json`, so without the flag the `kit:*` agents are missing. The probe session stops the run (`probe: agents not loaded: ...`) when its `init` event lacks any `kit:*` agent, before any spec or plan stage.
+
 The scheduled agent runs on weekdays only, from the applied version's snapshot (`PYTHONPATH=~/.claude/kit/<version>/src`). A foreground `uv run --project <kit> kit loop run <repo>` runs the kit checkout's own code, unless a newer applied snapshot exists, in which case it hands over to that snapshot. To start a run by hand on a weekend, add `--weekend-ok`.
 
 ### Resume a parked item

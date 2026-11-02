@@ -34,7 +34,7 @@ from kit.loop.state import (
     unfinished,
     write_status,
 )
-from kit.loop.stream import STAGE_MODELS, StageResult, Usage, over_limit, parse_stream
+from kit.loop.stream import STAGE_MODELS, StageResult, Usage, missing_agents, over_limit, parse_stream
 from kit.roadmap import ROADMAP_PATH, Roadmap, RoadmapError, parse_roadmap
 
 PROMPTS = Path(__file__).with_name("prompts")
@@ -549,14 +549,24 @@ class _Run:
         return None
 
 
+def _probe_problem(r: StageResult, missing: tuple[str, ...]) -> str:
+    """Why the probe session is unfit to run stages, or "" when it is fit."""
+    if r.outcome == "error":
+        return f"probe failed: {r.detail}"
+    if r.usage is None:
+        return "probe gave no usage"
+    return f"probe: agents not loaded: {', '.join(missing)}" if missing else ""
+
+
 def _probe(env: Env) -> tuple[Usage | None, str]:
-    r = parse_stream(env.claude("probe", render("probe", env)))
+    lines = env.claude("probe", render("probe", env))
+    r = parse_stream(lines)
     _log_result(env, "probe", r)
     _record_stage(env, "", "probe", r)
     if r.outcome == "usage":
         return r.usage, "limit"
-    if r.outcome == "error" or r.usage is None:
-        why = f"probe failed: {r.detail}" if r.outcome == "error" else "probe gave no usage"
+    why = _probe_problem(r, missing_agents(lines))
+    if why:
         env.log(why)
         env.notify(f"feature loop stopped: {why}")
         return r.usage, "env"

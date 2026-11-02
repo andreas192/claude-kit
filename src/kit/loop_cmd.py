@@ -45,6 +45,12 @@ def runtime_dir(kit_home: Path, repo: Path) -> Path:
     return kit_home / "loop" / repo.name
 
 
+def loop_plugin_dir(kit_home: Path, version: str) -> Path | None:
+    """The kit plugin in the snapshot of the running version, for `claude --plugin-dir`; None when the snapshot has none."""
+    path = kit_home / version / "plugins" / "kit"
+    return path if path.is_dir() else None
+
+
 def scratch_dir(repo: Path, root: Path | None = None) -> Path:
     """Where loop sessions write files such as the PR body: `~/.claude` is protected in don't-ask mode, so not the runtime dir."""
     return (root or Path(tempfile.gettempdir())).resolve() / "kit-loop" / repo.name
@@ -155,10 +161,10 @@ def _git_in(worktree: Path) -> Callable[[list[str]], str]:
     return sh
 
 
-def _claude_in(worktree: Path, settings: Path) -> Callable[[str, str], list[str]]:
+def _claude_in(worktree: Path, settings: Path, plugin_dir: Path | None) -> Callable[[str, str], list[str]]:
     def claude(stage: str, text: str) -> list[str]:
         try:
-            done = subprocess.run(claude_command(stage, text, settings), cwd=worktree, capture_output=True, text=True, timeout=STAGE_TIMEOUT)
+            done = subprocess.run(claude_command(stage, text, settings, plugin_dir), cwd=worktree, capture_output=True, text=True, timeout=STAGE_TIMEOUT)
         except subprocess.TimeoutExpired:
             return [failure_line(f"claude timed out after {STAGE_TIMEOUT // 3600} hours")]
         return stream_lines(done.stdout, done.returncode, done.stderr)
@@ -217,7 +223,7 @@ def real_env(
     scratch = scratch_dir(repo)
     settings = write_settings(repo, runtime, scratch, config, test_command)
     return driver.Env(
-        claude=_claude_in(worktree, settings),
+        claude=_claude_in(worktree, settings, loop_plugin_dir(kit_home, f"v{__version__}")),
         sh=_git_in(worktree),
         notify=_notify_with(repo.name),
         log=file_log(runtime),
