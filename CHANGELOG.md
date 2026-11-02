@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.2 — 2026-11-02
+
+- `kit loop` sessions load the kit plugin from the running version's snapshot with `--plugin-dir`. `claude -p` never registers the versioned marketplace that `kit apply` declares in `.claude/settings.json`, so since v0.3.2 loop sessions had no `kit:*` agents and the build stage parked after spec and plan were paid for. The probe now stops the run when its session lacks any `kit:*` agent.
+
 ## v0.4.1 — 2026-11-02
 
 - `kit loop run` and `kit loop resume` add the loop worktree (`/.claude/worktrees/feature-loop/`) to the repo's local `.git/info/exclude`, even when the worktree already exists. An untracked worktree used to make `kit apply` and `scripts/apply-kit.sh` refuse the repo as dirty, as in investment, whose `.gitignore` doesn't list it.
