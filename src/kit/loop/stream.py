@@ -13,6 +13,8 @@ DETAIL_MAX = 500
 RESULT_MAX = 600
 _LOOP = re.compile(r"^LOOP: (ok|more|park)\b\s*(.*)$")
 
+KIT_AGENTS = ("kit:implementer-haiku", "kit:implementer-sonnet", "kit:reviewer-sonnet")
+
 STAGE_MODELS = {
     "probe": ("haiku", None),
     "spec": ("opus", "high"),
@@ -115,6 +117,24 @@ def parse_stream(lines: Iterable[str]) -> StageResult:
     return StageResult(outcome, detail, usage, cost)
 
 
+def _init_agents(lines: Iterable[str]) -> list[str]:
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("type") == "system" and event.get("subtype") == "init":
+            agents = event.get("agents")
+            return [a for a in agents if isinstance(a, str)] if isinstance(agents, list) else []
+    return []
+
+
+def missing_agents(lines: Iterable[str]) -> tuple[str, ...]:
+    """The kit agents the session's `init` event does not list; all of them without one."""
+    loaded = set(_init_agents(lines))
+    return tuple(a for a in KIT_AGENTS if a not in loaded)
+
+
 def over_limit(usage: Usage | None) -> bool:
     return usage is None or usage.five_hour >= LIMIT or usage.seven_day >= LIMIT
 
@@ -141,10 +161,13 @@ def stream_lines(stdout: str, code: int, stderr: str) -> list[str]:
     return lines
 
 
-def claude_command(stage: str, text: str, settings: Path) -> list[str]:
+def claude_command(stage: str, text: str, settings: Path, plugin_dir: Path | None = None) -> list[str]:
+    """`plugin_dir` loads the kit plugin for this session only: `-p` never registers the marketplace `kit apply` declares."""
     model, effort = STAGE_MODELS[stage]
     cmd = ["claude", "-p", text, "--model", model]
     if effort:
         cmd += ["--effort", effort]
+    if plugin_dir is not None:
+        cmd += ["--plugin-dir", str(plugin_dir)]
     cmd += ["--output-format", "stream-json", "--verbose", "--permission-mode", "dontAsk"]
     return cmd + ["--settings", str(settings)]

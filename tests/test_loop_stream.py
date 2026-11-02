@@ -5,7 +5,17 @@ from pathlib import Path
 
 import pytest
 
-from kit.loop.stream import STAGE_MODELS, StageCost, Usage, claude_command, over_limit, parse_stream, stream_lines
+from kit.loop.stream import (
+    KIT_AGENTS,
+    STAGE_MODELS,
+    StageCost,
+    Usage,
+    claude_command,
+    missing_agents,
+    over_limit,
+    parse_stream,
+    stream_lines,
+)
 
 
 def rate(five: float, seven: float = 0.1, status: str = "allowed") -> str:
@@ -94,6 +104,26 @@ def test_command_carries_the_prompt_the_model_and_the_settings_file():
     assert cmd[:5] == ["claude", "-p", "the prompt", "--model", "opus"]
     assert cmd[-2:] == ["--settings", "/r/settings.json"]
     assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
+    assert "--plugin-dir" not in cmd
+
+
+def test_command_loads_the_kit_plugin_dir_when_given():
+    cmd = claude_command("build", "x", Path("/r/settings.json"), Path("/k/v0.4.1/plugins/kit"))
+    assert cmd[cmd.index("--plugin-dir") + 1] == "/k/v0.4.1/plugins/kit"
+    assert cmd[-2:] == ["--settings", "/r/settings.json"]
+
+
+def init(agents: list[str]) -> str:
+    return json.dumps({"type": "system", "subtype": "init", "agents": agents})
+
+
+def test_missing_agents_names_the_kit_agents_the_init_event_lacks():
+    assert missing_agents([init(["Explore", *KIT_AGENTS]), result("LOOP: ok")]) == ()
+    assert missing_agents([init(["Explore", "kit:implementer-haiku"])]) == ("kit:implementer-sonnet", "kit:reviewer-sonnet")
+
+
+def test_missing_agents_is_all_of_them_without_an_init_event():
+    assert missing_agents(["not json", result("LOOP: ok")]) == KIT_AGENTS
 
 
 def costed(text: str = "LOOP: ok", **over) -> str:
