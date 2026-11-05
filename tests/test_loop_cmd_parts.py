@@ -31,6 +31,7 @@ from kit.loop_cmd import (
     scratch_dir,
     status_lines,
     uninstall,
+    version_lines,
     write_settings,
 )
 
@@ -419,6 +420,57 @@ def test_status_lines_say_when_the_agent_is_not_loaded_and_there_is_no_log(tmp_p
 
     lines = status_lines(tmp_path / "demo", tmp_path, not_loaded)
     assert lines[0].startswith("launchd: com.kit.loop.demo not loaded") and lines[1] == "no loop.log yet"
+
+
+def origin_on(version: str):
+    text = json.dumps({"test_command": "t", "applies": [{"version": version, "commit": "c", "applied_at": "t"}]})
+    return lambda cmd, cwd: text if cmd[1] == "show" else ""
+
+
+def loop_plist(tmp_path: Path, pinned: str) -> tuple[Path, Path]:
+    repo, plist = tmp_path / "demo", tmp_path / "a.plist"
+    write_kitfile(repo, KitFile("t", (Apply(pinned, "c", "t"),), LoopConfig("main")))
+    plist.write_text(f"<string>/k/{pinned}/src</string>")
+    return repo, plist
+
+
+def test_version_lines_say_runs_hand_over_when_the_snapshot_exists(tmp_path):
+    repo, plist = loop_plist(tmp_path, "v0.2.0")
+    cli = tmp_path / "home" / "v0.4.2" / "src" / "kit" / "cli.py"
+    cli.parent.mkdir(parents=True)
+    cli.write_text("")
+    assert version_lines(repo, plist, tmp_path / "home", origin_on("v0.4.2")) == [
+        f"plist: starts on v0.2.0, repo is on v0.4.2, runs hand over to v0.4.2; update it with kit loop install {repo}"
+    ]
+
+
+def test_version_lines_say_runs_stay_when_the_snapshot_is_missing(tmp_path):
+    repo, plist = loop_plist(tmp_path, "v0.2.0")
+    assert "runs stay on v0.2.0" in version_lines(repo, plist, tmp_path / "home", origin_on("v0.4.2"))[0]
+
+
+def test_version_lines_say_runs_stay_on_a_plist_newer_than_the_repo(tmp_path):
+    repo, plist = loop_plist(tmp_path, "v0.5.0")
+    assert "runs stay on v0.5.0" in version_lines(repo, plist, tmp_path / "home", origin_on("v0.4.2"))[0]
+
+
+def test_version_lines_are_empty_when_the_plist_matches_the_repo(tmp_path):
+    repo, plist = loop_plist(tmp_path, "v0.4.2")
+    assert version_lines(repo, plist, tmp_path / "home", origin_on("v0.4.2")) == []
+
+
+def test_version_lines_are_empty_without_a_plist_or_a_loop_section(tmp_path):
+    repo, plist = loop_plist(tmp_path, "v0.2.0")
+    assert version_lines(repo, tmp_path / "none.plist", tmp_path, origin_on("v0.4.2")) == []
+    assert version_lines(tmp_path / "other", plist, tmp_path, origin_on("v0.4.2")) == []
+
+
+def test_version_lines_report_a_repo_version_that_cannot_be_read(tmp_path):
+    def offline(cmd, cwd):
+        raise KitError("git fetch origin failed: no network")
+
+    repo, plist = loop_plist(tmp_path, "v0.2.0")
+    assert version_lines(repo, plist, tmp_path, offline) == ["plist: starts on v0.2.0, repo version unknown: git fetch origin failed: no network"]
 
 
 def test_request_hooks_are_empty_without_requests_targets(tmp_path):

@@ -16,6 +16,7 @@ from kit.migrate import (
     load_known,
     loop_notes,
     plan_migration,
+    plist_notes,
     prose_mentions,
     prose_outside,
     roadmap_files,
@@ -174,6 +175,21 @@ def test_loop_notes_are_empty_for_a_repo_without_a_loop():
 
 def test_loop_notes_skip_the_section_hint_when_the_section_exists():
     assert loop_notes(True, [], True, Path("/r/app")) == ["after merging, run kit loop install /r/app"]
+
+
+def test_plist_notes_ask_for_a_reinstall_when_the_plist_pins_another_version(tmp_path):
+    plist = tmp_path / "a.plist"
+    plist.write_text("<string>/k/v0.2.0/src</string>")
+    assert plist_notes(plist, "v0.4.2", Path("/r/app")) == [
+        "after merging, run kit loop install /r/app: its plist still starts runs on v0.2.0"
+    ]
+
+
+def test_plist_notes_are_empty_on_the_same_version_or_without_a_plist(tmp_path):
+    plist = tmp_path / "a.plist"
+    assert plist_notes(plist, "v0.4.2", Path("/r/app")) == []
+    plist.write_text("<string>/k/v0.4.2/src</string>")
+    assert plist_notes(plist, "v0.4.2", Path("/r/app")) == []
 
 
 def test_isolation_notes_flag_an_unqualified_never_write_line(tmp_path):

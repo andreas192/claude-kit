@@ -90,7 +90,6 @@ def add_loop_parser(subparsers) -> None:
         action.add_argument("--kit-home", type=Path, default=KIT_HOME)
         if name in ("install", "uninstall", "status"):
             action.add_argument("--no-launchctl", action="store_true")
-        if name in ("install", "uninstall"):
             action.add_argument("--launch-agents", type=Path, default=DEFAULT_AGENTS)
         if name == "run":
             action.add_argument("--pick-only", action="store_true")

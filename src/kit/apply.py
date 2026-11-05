@@ -20,6 +20,7 @@ from kit.migrate import (
     isolation_notes,
     loop_notes,
     plan_migration,
+    plist_notes,
     prose_mentions,
     prose_outside,
     roadmap_files,
@@ -87,7 +88,11 @@ def apply(
     gitops.commit_all(repo, f"chore: record claude-kit {version}", run)
 
     had_loop = OLD_LOOP_SCRIPT in (*migration.remove, *migration.overrides)
-    notes = loop_notes(had_loop, other_loop_agents(agents_dir, repo, loop_label(repo.name)), kit.loop is not None, repo)
+    label = loop_label(repo.name)
+    notes = [
+        *loop_notes(had_loop, other_loop_agents(agents_dir, repo, label), kit.loop is not None, repo),
+        *plist_notes(agents_dir / f"{label}.plist", version, repo),
+    ]
     targets = kit.requests.targets if kit.requests else ()
     prose = [*prose_outside(prose_mentions(repo, run), added), *isolation_notes(repo, targets)]
     body = gitops.pr_body(version, migration, removed_hooks, added, prose, checks, roadmap_files(repo, run), notes)

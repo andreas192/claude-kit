@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from kit.loop.schedule import may_start, other_loop_agents, plist_xml, run_hours
+from kit.loop.schedule import may_start, other_loop_agents, pinned_other_version, plist_version, plist_xml, run_hours
 
 
 @pytest.mark.parametrize(
@@ -43,3 +43,31 @@ def test_other_loop_agents_finds_the_old_dgi_agent(tmp_path):
     assert other_loop_agents(
         tmp_path, Path("/p/dividend-growth"), "com.kit.loop.dividend-growth"
     ) == [tmp_path / "com.dgi.feature-loop.plist"]
+
+
+def pinning(version: str) -> str:
+    env = {"PATH": "/usr/bin", "PYTHONPATH": f"/home/.claude/kit/{version}/src"}
+    return plist_xml("com.kit.loop.demo", ["uv"], env, Path("/r"), Path("/l"), [0])
+
+
+def test_plist_version_reads_the_snapshot_on_pythonpath():
+    assert plist_version(pinning("v0.2.0")) == "v0.2.0"
+
+
+def test_plist_version_is_none_for_a_plist_that_pins_no_snapshot():
+    assert plist_version(plist_xml("x", ["uv"], {"PATH": "/usr/bin"}, Path("/r"), Path("/l"), [0])) is None
+
+
+def test_pinned_other_version_names_an_older_or_newer_pin(tmp_path):
+    plist = tmp_path / "a.plist"
+    plist.write_text(pinning("v0.2.0"))
+    assert pinned_other_version(plist, "v0.4.2") == "v0.2.0"
+    plist.write_text(pinning("v0.5.0"))
+    assert pinned_other_version(plist, "v0.4.2") == "v0.5.0"
+
+
+def test_pinned_other_version_is_none_on_the_same_version_or_without_a_plist(tmp_path):
+    plist = tmp_path / "a.plist"
+    assert pinned_other_version(plist, "v0.4.2") is None
+    plist.write_text(pinning("v0.4.2"))
+    assert pinned_other_version(plist, "v0.4.2") is None
