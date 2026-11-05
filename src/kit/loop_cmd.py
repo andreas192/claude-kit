@@ -22,7 +22,7 @@ from kit.loop import driver
 from kit.loop.handover import handover_target, origin_latest, snapshot_src
 from kit.loop.prs import PR_FIELDS, Pr, loop_prs
 from kit.loop.requests import RequestRecord
-from kit.loop.schedule import loop_label, other_loop_agents, plist_xml, run_hours
+from kit.loop.schedule import loop_label, other_loop_agents, plist_version, plist_xml, run_hours
 from kit.loop.settings import base_settings, loop_settings
 from kit.loop.state import owner_questions, read_status, write_status
 from kit.loop.stream import claude_command, failure_line, stream_lines
@@ -369,6 +369,27 @@ def status_lines(repo: Path, runtime: Path, launchctl: Runner | None) -> list[st
     return lines + (log.read_text().splitlines()[-STATUS_LOG_LINES:] if log.is_file() else ["no loop.log yet"])
 
 
+def drift_line(pinned: str, latest: str, kit_home: Path, repo: Path) -> str:
+    target = handover_target(latest, pinned, kit_home)
+    effect = f"runs hand over to {latest}" if target else f"runs stay on {pinned}"
+    return f"plist: starts on {pinned}, repo is on {latest}, {effect}; update it with kit loop install {repo}"
+
+
+def version_lines(repo: Path, plist: Path, kit_home: Path, runner: Runner) -> list[str]:
+    """One line when the plist pins another version than origin's base branch records; a failed check is reported, not raised."""
+    pinned = plist_version(plist.read_text()) if plist.is_file() else None
+    if pinned is None:
+        return []
+    try:
+        kit = read_kitfile(repo)
+        if kit is None or kit.loop is None:
+            return []
+        latest = origin_latest(repo, kit.loop.base_branch, runner)
+    except KitError as error:
+        return [f"plist: starts on {pinned}, repo version unknown: {error}"]
+    return [] if pinned == latest else [drift_line(pinned, latest, kit_home, repo)]
+
+
 def _launchctl(args: argparse.Namespace) -> Runner | None:
     return None if args.no_launchctl else run
 
@@ -407,7 +428,9 @@ def uninstall_loop(args: argparse.Namespace) -> int:
 
 def status_loop(args: argparse.Namespace) -> int:
     repo = args.repo.resolve()
-    print("\n".join(status_lines(repo, runtime_dir(args.kit_home, repo), _launchctl(args))))
+    plist = args.launch_agents / f"{loop_label(repo.name)}.plist"
+    lines = [*version_lines(repo, plist, args.kit_home, run), *status_lines(repo, runtime_dir(args.kit_home, repo), _launchctl(args))]
+    print("\n".join(lines))
     return 0
 
 

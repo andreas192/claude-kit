@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from kit.gitrun import Runner
+from kit.loop.schedule import pinned_other_version
 
 CANDIDATES = (
     ".claude/agents/implementer-haiku.md",
@@ -106,3 +107,9 @@ def loop_notes(had_loop: bool, agents: list[Path], has_loop_section: bool, repo:
     install = [f"after merging, run kit loop install {repo}"] if had_loop else []
     section = ["add a loop section to .claude/kit.json (see the spec)"] if had_loop and not has_loop_section else []
     return [*unload, *install, *section]
+
+
+def plist_notes(plist: Path, version: str, repo: Path) -> list[str]:
+    """The apply PR's reminder: apply may not write the plist, and the new version is only live after the merge."""
+    pinned = pinned_other_version(plist, version)
+    return [f"after merging, run kit loop install {repo}: its plist still starts runs on {pinned}"] if pinned else []

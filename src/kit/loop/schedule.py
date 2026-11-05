@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+PINNED_SNAPSHOT = re.compile(r"/(v\d+\.\d+\.\d+)/src</string>")
 WEEKDAYS = range(1, 6)  # launchd Weekday: 1 = Monday ... 5 = Friday
 PLIST_HEADER = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -75,6 +77,18 @@ def plist_xml(
         ]
     )
     return f"{PLIST_HEADER}<dict>{body}</dict>\n</plist>\n"
+
+
+def plist_version(text: str) -> str | None:
+    """The kit version whose snapshot a loop plist puts on PYTHONPATH, or None when it names none."""
+    found = PINNED_SNAPSHOT.search(text)
+    return found.group(1) if found else None
+
+
+def pinned_other_version(plist: Path, version: str) -> str | None:
+    """The version a plist pins when that is not `version`; None for a match, a missing plist or no pin."""
+    pinned = plist_version(plist.read_text()) if plist.is_file() else None
+    return None if pinned == version else pinned
 
 
 def other_loop_agents(agents_dir: Path, repo: Path, own_label: str) -> list[Path]:

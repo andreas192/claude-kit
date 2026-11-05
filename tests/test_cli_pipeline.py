@@ -226,6 +226,17 @@ def test_apply_twice_stops_with_already_on_and_adds_no_commit(tmp_path, target, 
 
 
 @needs_node
+def test_apply_notes_a_plist_on_another_version_in_the_pr_body(tmp_path, target, kit_repo, monkeypatch):
+    bodies = []
+    monkeypatch.setattr("kit.apply.gitops.pr_body", lambda *a: bodies.append(a[-1]) or "body")
+    agents = tmp_path / "launch-agents"
+    agents.mkdir()
+    (agents / f"com.kit.loop.{target.name}.plist").write_text("<string>/k/v0.0.9/src</string>")
+    assert main(apply_args(tmp_path, target)) == 0
+    assert bodies == [[f"after merging, run kit loop install {target.resolve()}: its plist still starts runs on v0.0.9"]]
+
+
+@needs_node
 def test_apply_a_newer_version_replaces_the_marketplace_entry(tmp_path, target, kit_repo):
     assert main(apply_args(tmp_path, target)) == 0
     kit_path = target / ".claude/kit.json"
@@ -369,6 +380,16 @@ def test_loop_status_prints_the_last_log_lines(tmp_path, loop_repo, capsys):
     assert main(["loop", "status", str(repo), "--no-launchctl", "--kit-home", str(kit_home)]) == 0
     out = capsys.readouterr().out.splitlines()
     assert out[-1] == "line 29" and "line 9" not in out and "line 10" in out
+
+
+def test_loop_status_reports_a_plist_on_another_version(tmp_path, loop_repo, capsys):
+    repo, kit_home = loop_repo
+    agents = tmp_path / "agents"
+    agents.mkdir()
+    (agents / "com.kit.loop.loop-repo.plist").write_text("<string>/k/v0.1.0/src</string>")
+    assert main(["loop", "status", str(repo), "--no-launchctl", "--launch-agents", str(agents), "--kit-home", str(kit_home)]) == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first == f"plist: starts on v0.1.0, repo is on v0.2.0, runs hand over to v0.2.0; update it with kit loop install {repo.resolve()}"
 
 
 def test_loop_without_a_loop_section_is_exit_1(tmp_path, capsys):

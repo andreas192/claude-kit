@@ -27,11 +27,11 @@ A failed probe stopped both loops for two days while launchd reported exit code 
 Scope: `src/kit/loop/driver.py` (`guarded`) and `src/kit/loop_cmd.py`. Exit non-zero when a run stops with `env`, and record the stop so `kit loop status` and `kit roadmap` show it until a later probe succeeds. Check that `osascript` banners are delivered from launchd, and keep the existing `notify` path if they are. A probe failure must still cost nothing and must not retry in a loop.
 
 ### Keep loop agents on the applied kit version
-- Status: open
+- Status: done
 
-Both plists still pin `PYTHONPATH` to `~/.claude/kit/v0.2.0/src`, though both repos recorded v0.4.2. Scheduled runs therefore miss every fix since v0.2.0. See `docs/reports/2026-11-05-loop-auth-outage.md`.
+Both plists still pinned `PYTHONPATH` to `~/.claude/kit/v0.2.0/src`, though both repos recorded v0.4.2. Scheduled runs did reach v0.4.2 through the handover; only a failed handover check left them on the pin. See `docs/reports/2026-11-05-loop-auth-outage.md`.
 
-Scope: first find why `kit apply` left the plists from 2026-10-26 in place, starting with `snapshot_for_install` in `src/kit/loop_cmd.py`. Then make `apply` update the plist or fail loudly, and make `kit loop status` report a plist on a different version from the repo.
+Nothing re-ran `kit loop install` after 2026-10-26, and `kit apply` asked for it only when migrating off the old loop script. `apply` may not write the plist, so its PR now carries a reminder, and `kit loop status` reports a plist on a different version from the repo.
 
 ### Find why scheduled runs lost the Claude login
 - Status: blocked
