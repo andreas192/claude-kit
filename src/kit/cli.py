@@ -11,8 +11,9 @@ from kit.errors import KitError
 from kit.gitrun import run
 from kit.insights_cmd import insights_command
 from kit.kitfile import read_kitfile, require_requests
+from kit.loop.alert import probe_failure_line
 from kit.loop.pick import pick
-from kit.loop_cmd import DEFAULT_AGENTS, fetch_prs, loop_command, remote_loop_branches
+from kit.loop_cmd import DEFAULT_AGENTS, fetch_prs, loop_command, remote_loop_branches, runtime_dir
 from kit.migrate import load_known
 from kit.request import allowed_target
 from kit.request_cmd import file_request, read_request_file
@@ -52,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_parser.add_argument("--root", type=Path, default=PROJECTS_ROOT)
     roadmap = subparsers.add_parser("roadmap", help="validate docs/roadmap.md and show what the loop would pick")
     roadmap.add_argument("repo", type=Path)
+    roadmap.add_argument("--kit-home", type=Path, default=KIT_HOME)
     request = subparsers.add_parser("request", help="file a roadmap request on another repo as a PR")
     request.add_argument("requester", type=Path)
     request.add_argument("target", type=Path)
@@ -129,7 +131,8 @@ def roadmap_command(args: argparse.Namespace) -> int:
     roadmap = read_roadmap(repo)
     prs, gh_error = fetch_prs(repo, run)
     result = pick(roadmap, remote_loop_branches(repo, run), prs) if prs is not None else None
-    print(format_report(roadmap, result, prs, gh_error, requester_roadmaps(repo, roadmap)), end="")
+    alert = probe_failure_line(runtime_dir(args.kit_home, repo))
+    print(format_report(roadmap, result, prs, gh_error, requester_roadmaps(repo, roadmap), alert), end="")
     return 0
 
 

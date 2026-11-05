@@ -85,3 +85,9 @@ def test_a_requester_roadmap_without_the_item_lists_it():
 
 def test_requesters_default_to_no_tell_lines():
     assert "Tell" not in format_report(DONE, None, [])
+
+
+def test_a_failing_probe_comes_first():
+    done = parse_roadmap("### A\n- Status: done\n")
+    lines = format_report(done, Pick(None, ()), [], alert="loop probe failing since t: why").splitlines()
+    assert lines[0] == "loop probe failing since t: why" and lines[1].startswith("Items:")

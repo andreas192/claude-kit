@@ -11,6 +11,7 @@ from builders import GOOD, add_loop_package, commit, git, init_origin, tag
 from kit.errors import KitError
 from kit.gitrun import run
 from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, write_kitfile
+from kit.loop.alert import record_probe_failure
 from kit.loop.driver import Env
 from kit.loop.state import Status, write_status
 from kit.loop_cmd import (
@@ -412,6 +413,12 @@ def test_status_lines_are_launchd_state_then_the_last_log_lines(tmp_path):
     (tmp_path / "loop.log").write_text("\n".join(f"l{i}" for i in range(25)) + "\n")
     lines = status_lines(tmp_path / "demo", tmp_path, lambda cmd, cwd: "\n".join(f"p{i}" for i in range(40)))
     assert lines[:20] == [f"p{i}" for i in range(20)] and lines[20:] == [f"l{i}" for i in range(5, 25)]
+
+
+def test_status_lines_lead_with_a_failing_probe(tmp_path):
+    record_probe_failure(tmp_path, datetime(2026, 11, 3, 15), "probe failed: expired")
+    lines = status_lines(tmp_path / "demo", tmp_path, None)
+    assert lines == ["loop probe failing since 2026-11-03T15:00:00: probe failed: expired", "no loop.log yet"]
 
 
 def test_status_lines_say_when_the_agent_is_not_loaded_and_there_is_no_log(tmp_path):

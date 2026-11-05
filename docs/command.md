@@ -13,7 +13,7 @@ Run the kit against a repo from its own `.venv`:
 uv run --project ~/Projects/Personal/claude-kit kit apply <repo> [--version vX.Y.Z] [--launch-agents DIR]
 uv run --project ~/Projects/Personal/claude-kit kit bench <repo> --control <repo>
 uv run --project ~/Projects/Personal/claude-kit kit status
-uv run --project ~/Projects/Personal/claude-kit kit roadmap <repo>           # validate docs/roadmap.md, show the next pick and the owner's list
+uv run --project ~/Projects/Personal/claude-kit kit roadmap <repo> [--kit-home DIR]   # validate docs/roadmap.md, show the next pick and the owner's list
 uv run --project ~/Projects/Personal/claude-kit kit loop run <repo> [--pick-only] [--weekend-ok] [--kit-home DIR]
 uv run --project ~/Projects/Personal/claude-kit kit loop install <repo> [--launch-agents DIR] [--no-launchctl] [--kit-home DIR]
 uv run --project ~/Projects/Personal/claude-kit kit loop uninstall <repo> [--launch-agents DIR] [--no-launchctl] [--kit-home DIR]
@@ -33,10 +33,10 @@ scripts/apply-kit.sh <investment|dividend-growth> [vX.Y.Z] [--no-pr]   # version
 It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<version>` branch.
 
 - `apply --launch-agents DIR`: where the loop's launchd plist goes when the repo has one (default `~/Library/LaunchAgents`).
-- `roadmap <repo>`: read-only. Exits 1 with each error's line number when `docs/roadmap.md` does not validate.
+- `roadmap <repo>`: read-only. Exits 1 with each error's line number when `docs/roadmap.md` does not validate. Starts with a `loop probe failing since ...` line while the repo's loop has a failing probe.
 - `loop run`: one loop run in the foreground. `--pick-only` prints the pick and stops. `--weekend-ok` lets it run on Saturday or Sunday.
 - `loop install|uninstall`: write or remove `com.kit.loop.<repo-name>.plist` and load or unload it with `launchctl`. `--no-launchctl` only writes the file. Run `loop install` again after an apply PR merges to move the plist to that version; `kit apply` cannot do it (it writes only the repo and `~/.claude/kit/`, before the merge) and leaves a reminder in the PR. Until then a run starts on the plist's version and hands over to the applied one, or stays on the plist's version if the handover check fails. Install reloads the agent, which stops a run in progress, so check that none is active first.
-- `loop status`: launchd state and the last 20 lines of `loop.log`, after a `plist:` line when the plist pins a different version from `.claude/kit.json` on `origin/<base_branch>`.
+- `loop status`: launchd state and the last 20 lines of `loop.log`, after a `loop probe failing since ...` line while the probe is failing and a `plist:` line when the plist pins a different version from `.claude/kit.json` on `origin/<base_branch>`.
 - `request <requester-repo> <target-repo> <request-file>`: files a roadmap request on another repo as a PR and prints its URL. The request file holds an optional `Target: <repo>` line, a `### <title>` heading, optional `- Field: value` lines and a body. The item lands as `Status: owner` in `## Requests` of the target's `docs/roadmap.md` (`Status`, `Blocked by`, `Requested by` and `Depends on` from the file are replaced or dropped). Only targets listed in the requester's `requests.targets` that run kit v0.4.0 or later are accepted. It writes nothing in the requester; in the target it uses a temporary worktree under `<kit-home>/requests/` and never touches the target's checkout.
 - `--kit-home DIR` defaults to `~/.claude/kit`.
 - `loop run --no-handover` is internal: the driver passes it when it re-executes into a newer snapshot.
@@ -52,12 +52,15 @@ Runtime files live in `~/.claude/kit/loop/<repo-name>/`, never in the repo:
 - `launchd.log`: stdout and stderr of the scheduled run, for launchd failures.
 - `state.json`: the loop's own state between runs.
 - `settings.json`: the permissions for `claude -p`, regenerated on each run from the kit's base settings, the repo's `.claude/loop-settings.json` and `forbidden_paths`.
+- `probe-failure.txt`: the first time and latest reason of a failing probe. It stays until a probe reaches Claude, even one that stops on usage.
 - `note.md`: the note written when no roadmap item is left.
 - `note-body.md`: the note as last posted, as a comment on the newest loop PR.
 
 The PR stage session writes its PR body to `pr-body.md` in `<temp dir>/kit-loop/<repo-name>/`, not in the runtime dir: `~/.claude/` is protected in don't-ask mode, and a file outside the checkout is writable only through an `Edit(//<abs path>/**)` rule (a `Write(...)` rule there grants nothing).
 
 Each `claude -p` session loads the kit plugin with `--plugin-dir ~/.claude/kit/<running version>/plugins/kit`. `-p` never registers the marketplace that `kit apply` declares in `.claude/settings.json`, so without the flag the `kit:*` agents are missing. The probe session stops the run (`probe: agents not loaded: ...`) when its `init` event lacks any `kit:*` agent, before any spec or plan stage.
+
+A run that stops with `env` exits 1, so launchd shows `last exit code = 1`; any other stop exits 0. The agent has no `KeepAlive`, so it waits for the next scheduled hour.
 
 The scheduled agent runs on weekdays only, from the applied version's snapshot (`PYTHONPATH=~/.claude/kit/<version>/src`). A foreground `uv run --project <kit> kit loop run <repo>` runs the kit checkout's own code, unless a newer applied snapshot exists, in which case it hands over to that snapshot. To start a run by hand on a weekend, add `--weekend-ok`.
 

@@ -20,7 +20,8 @@ Other fields: `Depends on` (comma-separated titles from this file), and `Spec`, 
 ## Reliability
 
 ### Make a failed loop probe hard to miss
-- Status: open
+- Status: done
+- PR: https://github.com/andreas192/claude-kit/pull/17
 
 A failed probe stopped both loops for two days while launchd reported exit code 0 and `launchd.log` stayed empty. See `docs/reports/2026-11-05-loop-auth-outage.md`.
 

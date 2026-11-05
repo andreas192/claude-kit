@@ -31,6 +31,7 @@ def test_plist_has_weekday_hours_and_no_interval(tmp_path):
     assert {e["Weekday"] for e in d["StartCalendarInterval"]} == {1, 2, 3, 4, 5}
     assert {e["Hour"] for e in d["StartCalendarInterval"]} == {0, 5, 10, 15, 20}
     assert "StartInterval" not in d
+    assert "KeepAlive" not in d  # launchd must not restart a run that exits non-zero
     assert d["EnvironmentVariables"]["PYTHONPATH"] == "/s/src"
     assert d["RunAtLoad"] is False
 

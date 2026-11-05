@@ -65,7 +65,8 @@ def format_report(
     prs: list[Pr] | None,
     gh_error: str = "",
     requesters: dict[str, Roadmap | None] | None = None,
+    alert: str = "",
 ) -> str:
     weekend = _weekend(roadmap, prs, gh_error, requesters or {})
-    lines = [_counts(roadmap), _next_pick(result, gh_error), *_skipped(result), *weekend]
+    lines = [*([alert] if alert else []), _counts(roadmap), _next_pick(result, gh_error), *_skipped(result), *weekend]
     return "\n".join(lines) + "\n"
