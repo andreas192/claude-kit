@@ -16,6 +16,7 @@ from typing import IO
 
 from kit.errors import KitError
 from kit.kitfile import LoopConfig
+from kit.loop.alert import clear_probe_failure, record_probe_failure
 from kit.loop.ledger import StageEntry, StopEntry, append_entry
 from kit.loop.pick import Pick, none_note
 from kit.loop.pick import pick as choose
@@ -564,12 +565,15 @@ def _probe(env: Env) -> tuple[Usage | None, str]:
     _log_result(env, "probe", r)
     _record_stage(env, "", "probe", r)
     if r.outcome == "usage":
+        clear_probe_failure(env.runtime)
         return r.usage, "limit"
     why = _probe_problem(r, missing_agents(lines))
     if why:
+        record_probe_failure(env.runtime, env.now(), why)
         env.log(why)
         env.notify(f"feature loop stopped: {why}")
         return r.usage, "env"
+    clear_probe_failure(env.runtime)
     return r.usage, "limit" if over_limit(r.usage) else ""
 
 
@@ -631,4 +635,4 @@ def guarded(env: Env, action: Callable[[Env], str]) -> int:
         env.notify(f"kit loop crashed; see {env.runtime}/loop.log")
         return 1
     env.log(f"stopped: {reason}")
-    return 0
+    return 1 if reason == "env" else 0

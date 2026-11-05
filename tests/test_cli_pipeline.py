@@ -5,7 +5,7 @@ import json
 import os
 import shutil
 import subprocess
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,6 +16,7 @@ from kit.bench.transcripts import transcript_dir_name
 from kit import cli
 from kit.cli import main
 from kit.gitrun import run
+from kit.loop.alert import record_probe_failure
 from kit.loop.ledger import StageEntry, append_entry
 from kit.loop.stream import StageCost
 from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, read_kitfile, write_kitfile
@@ -319,6 +320,15 @@ def test_roadmap_without_gh_still_prints_counts(tmp_path, monkeypatch, capsys):
     assert "Items: 1 open, 1 owner" in out and "Next pick: unknown (gh: not found)" in out
 
 
+def test_roadmap_shows_a_failing_probe_of_the_repo(tmp_path, monkeypatch, capsys):
+    repo = roadmap_repo(tmp_path)
+    fake_bin(tmp_path, monkeypatch, {})
+    kit_home = tmp_path / "kit-home"
+    record_probe_failure(kit_home / "loop" / repo.name, datetime(2026, 11, 3, 15), "probe failed: expired")
+    assert main(["roadmap", str(repo), "--kit-home", str(kit_home)]) == 0
+    assert capsys.readouterr().out.startswith("loop probe failing since 2026-11-03T15:00:00: probe failed: expired\n")
+
+
 def test_roadmap_invalid_is_exit_1_with_the_line(tmp_path, capsys):
     repo = roadmap_repo(tmp_path)
     (repo / "docs" / "roadmap.md").write_text("# Roadmap\n\n### Row A\n- Status: nope\n")
@@ -370,6 +380,16 @@ def test_loop_run_pick_only_prints_the_pick_from_origin(tmp_path, monkeypatch, l
     assert "pick Row A" in capsys.readouterr().out
     assert (kit_home / "loop" / "loop-repo" / "settings.json").is_file()
     assert "stopped: done" in (kit_home / "loop" / "loop-repo" / "loop.log").read_text()
+
+
+def test_loop_run_with_a_failed_probe_exits_1_and_status_shows_it(tmp_path, monkeypatch, loop_repo, capsys):
+    repo, kit_home = loop_repo
+    fake_bin(tmp_path, monkeypatch, {"gh": "echo '[]'", "claude": "echo 'login expired' >&2; exit 1"})
+    argv = ["loop", "run", str(repo), "--weekend-ok", "--no-handover", "--kit-home", str(kit_home)]
+    assert main(argv) == 1
+    assert main(["loop", "status", str(repo), "--no-launchctl", "--kit-home", str(kit_home)]) == 0
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.startswith("loop probe failing since ") and "login expired" in first
 
 
 def test_loop_status_prints_the_last_log_lines(tmp_path, loop_repo, capsys):

@@ -19,6 +19,7 @@ from kit.errors import KitError
 from kit.gitrun import Runner, run
 from kit.kitfile import KITFILE, KitFile, LoopConfig, RequestsConfig, read_kitfile
 from kit.loop import driver
+from kit.loop.alert import probe_failure_line
 from kit.loop.handover import handover_target, origin_latest, snapshot_src
 from kit.loop.prs import PR_FIELDS, Pr, loop_prs
 from kit.loop.requests import RequestRecord
@@ -358,7 +359,8 @@ def uninstall(repo: Path, agents_dir: Path, launchctl: Runner | None) -> Path:
 
 
 def status_lines(repo: Path, runtime: Path, launchctl: Runner | None) -> list[str]:
-    lines: list[str] = []
+    alert = probe_failure_line(runtime)
+    lines = [alert] if alert else []
     if launchctl is not None:
         label = loop_label(repo.name)
         try:

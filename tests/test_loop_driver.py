@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from kit.kitfile import LoopConfig
+from kit.loop.alert import probe_failure_line
 from kit.loop.driver import (
     CO_AUTHOR,
     Env,
@@ -754,6 +755,45 @@ def test_probe_without_the_kit_agents_stops_before_any_stage_and_names_them(tmp_
     assert run(f.env()) == "env" and f.stages == ["probe"] and f.cmds == []
     assert len(f.notices) == 1 and "kit:reviewer-sonnet" in f.notices[0]
     assert any("kit:implementer-sonnet" in m for m in f.logs)
+
+
+def bad_probe() -> dict:
+    return step(raw=[result("Failed to authenticate", True)], commit=False)
+
+
+def test_a_failed_probe_stays_recorded_from_its_first_failure(tmp_path):
+    def friday_at(hour: int):
+        return lambda: datetime(2026, 10, 23, hour)
+
+    run(FakeEnv(tmp_path, {"probe": [bad_probe()]}, now=friday_at(10)).env())
+    run(FakeEnv(tmp_path, {"probe": [bad_probe()]}, now=friday_at(15)).env())
+    line = probe_failure_line(tmp_path / "runtime")
+    assert "since 2026-10-23T10:00:00" in line and "Failed to authenticate" in line
+
+
+def test_a_probe_that_works_clears_the_record(tmp_path):
+    run(FakeEnv(tmp_path, {"probe": [bad_probe()]}, now=lambda: FRIDAY).env())
+    run(FakeEnv(tmp_path, scripts(), roadmap=ROADMAP_OWNER, now=lambda: FRIDAY).env())
+    assert probe_failure_line(tmp_path / "runtime") == ""
+
+
+def test_a_probe_stopped_on_usage_clears_the_record(tmp_path):
+    run(FakeEnv(tmp_path, {"probe": [bad_probe()]}, now=lambda: FRIDAY).env())
+    assert run(FakeEnv(tmp_path, {"probe": [usage_step()]}, now=lambda: FRIDAY).env()) == "limit"
+    assert probe_failure_line(tmp_path / "runtime") == ""
+
+
+def test_a_weekend_stop_runs_no_probe_and_keeps_the_record(tmp_path):
+    run(FakeEnv(tmp_path, {"probe": [bad_probe()]}, now=lambda: FRIDAY).env())
+    assert run(FakeEnv(tmp_path, {}, now=lambda: SUNDAY).env()) == "weekend"
+    assert probe_failure_line(tmp_path / "runtime") != ""
+
+
+def test_guarded_returns_1_on_an_env_stop_and_0_on_other_stops(tmp_path):
+    f = FakeEnv(tmp_path, scripts())
+    assert guarded(f.env(), lambda _e: "env") == 1
+    assert [guarded(f.env(), lambda _e, r=r: r) for r in ("done", "limit", "weekend")] == [0, 0, 0]
+    assert any("stopped: env" in m for m in f.logs)
 
 
 def test_guarded_logs_a_crash_notifies_and_returns_1(tmp_path):
