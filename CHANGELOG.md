@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.3 — 2026-11-05
+
+- A `kit loop` run that stops with `env` exits 1, so launchd shows `last exit code = 1`. Every other stop still exits 0, and the agent has no `KeepAlive`, so a failed run waits for its next scheduled hour. A failed probe used to leave launchd at 0 and `launchd.log` empty, which hid a two-day outage.
+- A failed probe is kept in `~/.claude/kit/loop/<repo>/probe-failure.txt` with its first failure time and latest reason, until a probe reaches Claude. `kit loop status` and `kit roadmap` start with `loop probe failing since ...` while it lasts. `kit roadmap` gains `--kit-home`.
+- `kit apply` reminds in its PR to re-run `kit loop install`, and `kit loop status` adds a `plist:` line when the plist pins a different version from the repo.
+
 ## v0.4.2 — 2026-11-02
 
 - `kit loop` sessions load the kit plugin from the running version's snapshot with `--plugin-dir`. `claude -p` never registers the versioned marketplace that `kit apply` declares in `.claude/settings.json`, so since v0.3.2 loop sessions had no `kit:*` agents and the build stage parked after spec and plan were paid for. The probe now stops the run when its session lacks any `kit:*` agent.
