@@ -28,6 +28,7 @@ Scope: `src/kit/loop/driver.py` (`guarded`) and `src/kit/loop_cmd.py`. Exit non-
 
 ### Keep loop agents on the applied kit version
 - Status: done
+- PR: https://github.com/andreas192/claude-kit/pull/16
 
 Both plists still pinned `PYTHONPATH` to `~/.claude/kit/v0.2.0/src`, though both repos recorded v0.4.2. Scheduled runs did reach v0.4.2 through the handover; only a failed handover check left them on the pin. See `docs/reports/2026-11-05-loop-auth-outage.md`.
 
