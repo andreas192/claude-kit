@@ -9,6 +9,7 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
 - `implementer-haiku`, `implementer-sonnet`, `reviewer-sonnet`: plugin agents
 - `context-warn` hook: warns when a session's context passes a step
 - test-layer guard hook: rules read from the repo's `.claude/test-layers.json`
+- kit-command guard hook: denies a bare `kit <subcommand>` (not on PATH) and names the full command from `.claude/kit.json`
 - token benchmarks: `kit bench`
 - roadmap: `docs/roadmap.md`, one format for every repo, checked by `kit roadmap`
 - feature loop: `kit loop`, runs roadmap items as PRs on weekdays under launchd

@@ -120,3 +120,20 @@ def test_require_requests_returns_the_section(tmp_path):
 def test_require_requests_refuses_a_repo_without_the_section(tmp_path, kit):
     with pytest.raises(KitError, match="has no requests section"):
         require_requests(kit, tmp_path)
+
+
+def test_kit_command_round_trips_after_the_other_sections(tmp_path):
+    k = KitFile("t", (), None, RequestsConfig(("../a",)), "uv run --project /k kit")
+    write_kitfile(tmp_path, k)
+    assert read_kitfile(tmp_path) == k
+    assert list(json.loads((tmp_path / ".claude" / "kit.json").read_text()))[-1] == "kit_command"
+
+
+def test_kit_command_survives_with_apply():
+    k = KitFile("t", (), kit_command="uv run --project /k kit")
+    assert with_apply(k, Apply("v0.1.0", "abc", "2026-10-18T10:00:00Z")).kit_command == "uv run --project /k kit"
+
+
+def test_kit_command_must_be_a_string():
+    with pytest.raises(KitError, match="kit_command must be a string"):
+        parse_kitfile('{"test_command": "t", "applies": [], "kit_command": 1}')

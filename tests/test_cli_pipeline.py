@@ -195,11 +195,17 @@ def commits(repo: Path) -> int:
 def test_apply_puts_the_version_into_the_repo_on_a_branch(tmp_path, target, kit_repo):
     kit_path = target / ".claude/kit.json"
     kit_path.write_text(json.dumps({"test_command": "true", "applies": [], "requests": {"targets": ["../investment"]}}, indent=2) + "\n")
+    (target / "docs").mkdir(exist_ok=True)
+    (target / "docs/command.md").write_text("Check it with `kit roadmap .`.\n")
     git(target, "add", "-A")
     git(target, "commit", "-m", "requests section")
     argv = apply_args(tmp_path, target)
     before = commits(target)
     assert main(argv) == 0
+    command = f"uv run --project {kit_repo.resolve()} kit"
+    assert json.loads((target / ".claude/kit.json").read_text())["kit_command"] == command
+    assert (target / "docs/command.md").read_text() == f"Check it with `{command} roadmap .`.\n"
+    assert f"`{command} roadmap <repo>` validates" in (target / "docs/roadmap.md").read_text()
     assert subprocess.run(["git", "branch", "--show-current"], cwd=target, capture_output=True, text=True).stdout.strip() == BRANCH
     applies = json.loads((target / ".claude/kit.json").read_text())["applies"]
     assert [a["version"] for a in applies] == ["v0.1.0"] and len(applies[0]["commit"]) == 40
@@ -229,12 +235,13 @@ def test_apply_twice_stops_with_already_on_and_adds_no_commit(tmp_path, target, 
 @needs_node
 def test_apply_notes_a_plist_on_another_version_in_the_pr_body(tmp_path, target, kit_repo, monkeypatch):
     bodies = []
-    monkeypatch.setattr("kit.apply.gitops.pr_body", lambda *a: bodies.append(a[-1]) or "body")
+    monkeypatch.setattr("kit.apply.gitops.pr_body", lambda *a: bodies.append(a[-2]) or "body")
     agents = tmp_path / "launch-agents"
     agents.mkdir()
     (agents / f"com.kit.loop.{target.name}.plist").write_text("<string>/k/v0.0.9/src</string>")
     assert main(apply_args(tmp_path, target)) == 0
-    assert bodies == [[f"after merging, run kit loop install {target.resolve()}: its plist still starts runs on v0.0.9"]]
+    command = f"uv run --project {kit_repo.resolve()} kit"
+    assert bodies == [[f"after merging, run {command} loop install {target.resolve()}: its plist still starts runs on v0.0.9"]]
 
 
 @needs_node
@@ -409,7 +416,7 @@ def test_loop_status_reports_a_plist_on_another_version(tmp_path, loop_repo, cap
     (agents / "com.kit.loop.loop-repo.plist").write_text("<string>/k/v0.1.0/src</string>")
     assert main(["loop", "status", str(repo), "--no-launchctl", "--launch-agents", str(agents), "--kit-home", str(kit_home)]) == 0
     first = capsys.readouterr().out.splitlines()[0]
-    assert first == f"plist: starts on v0.1.0, repo is on v0.2.0, runs hand over to v0.2.0; update it with kit loop install {repo.resolve()}"
+    assert first == f"plist: starts on v0.1.0, repo is on v0.2.0, runs hand over to v0.2.0; update it with uv run --project ~/Projects/Personal/claude-kit kit loop install {repo.resolve()}"
 
 
 def test_loop_without_a_loop_section_is_exit_1(tmp_path, capsys):

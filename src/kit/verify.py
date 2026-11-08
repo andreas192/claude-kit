@@ -60,6 +60,23 @@ def check_guard(plugin: Path, repo: Path, layers: dict, run_input: RunInput) -> 
     return Check("guard", True, "wiring imports denied in unit tests; pipeline test gets its contract")
 
 
+def check_kit_guard(plugin: Path, repo: Path, run_input: RunInput) -> Check:
+    """A bare `kit roadmap .` is denied, naming the command recorded in the repo's kit.json."""
+    payload = {"tool_name": "Bash", "tool_input": {"command": "kit roadmap ."}}
+    done = run_input(
+        ["node", str(plugin / "hooks" / "kit-command-guard.mjs")], repo, json.dumps(payload), {"CLAUDE_PROJECT_DIR": str(repo)}
+    )
+    if done.returncode != 0:
+        return Check("kit-command", False, f"kit-command-guard exited {done.returncode}: {done.stderr.strip()}")
+    try:
+        out = json.loads(done.stdout).get("hookSpecificOutput", {}) if done.stdout else {}
+    except json.JSONDecodeError as error:
+        return Check("kit-command", False, str(error))
+    if out.get("permissionDecision") != "deny":
+        return Check("kit-command", False, "a bare kit roadmap . was not denied")
+    return Check("kit-command", True, f"a bare kit command is denied: {out['permissionDecisionReason']}")
+
+
 def _context_transcript(tmp: Path, name: str, context: int) -> Path:
     usage = {"input_tokens": 1, "cache_creation_input_tokens": 0, "cache_read_input_tokens": context}
     record = {"type": "assistant", "isSidechain": False, "message": {"model": "claude-sonnet-5-5", "usage": usage}}
@@ -120,6 +137,7 @@ def run_checks(plugin: Path, repo: Path, layers: dict, test_command: str, tmp: P
         check_settings(repo),
         check_guard(plugin, repo, layers, run_input),
         check_context_warn(plugin, tmp, run_input),
+        check_kit_guard(plugin, repo, run_input),
         check_agents(plugin),
         check_tests(repo, test_command, run_input),
     ]

@@ -55,7 +55,7 @@ Cached input costs about a tenth of fresh input, so a warm session is cheap per 
 
 ## Benchmarks
 
-`kit bench` reads the session transcripts in `~/.claude/projects/` (read-only, counts only) and prints benchmarks B1–B13 with their targets (commands in `docs/command.md`, "Token benchmarks"). Before and after a rule change, run it with `--split <the commit's UTC time>`, and add `--control <repo>` as a control: investment keeps its own rules, so a change that shows in both repos is not this repo's doing.
+`uv run --project ~/Projects/Personal/claude-kit kit bench` reads the session transcripts in `~/.claude/projects/` (read-only, counts only) and prints benchmarks B1–B13 with their targets (commands in `docs/command.md`, "Token benchmarks"). Before and after a rule change, run it with `--split <the commit's UTC time>`, and add `--control <repo>` as a control: investment keeps its own rules, so a change that shows in both repos is not this repo's doing.
 
 | # | Benchmark | Rule it checks |
 |---|---|---|

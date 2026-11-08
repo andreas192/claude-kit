@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `kit` is not on PATH, and sessions in kit repos kept running a bare `kit roadmap .` or `kit request`, failing with exit 127 and searching the docs for the real command. `kit apply` now records `kit_command` (`uv run --project <the kit checkout it ran from> kit`) in `.claude/kit.json`. It rewrites every code span and code-block line that starts with `kit <subcommand>` in the repo's `CLAUDE.md` and top-level `docs/*.md` to that command, and lists each rewritten line in the PR under "Bare kit commands rewritten to the full command". Specs and plans under `docs/superpowers/` are left alone.
+- New `kit-command-guard` hook (PreToolUse, Bash): a bare `kit <subcommand>` is denied with the full command from `.claude/kit.json`, so the session retries at once. `kit apply` checks it as `kit-command`.
+- The starter files name kit by its full command (`uv run --project ~/Projects/Personal/claude-kit kit ...`), and apply fills in the checkout it runs from. The reminders `kit apply`, `kit loop install` and `kit loop status` print use the full command too.
+
 ## v0.4.3 — 2026-11-05
 
 - A `kit loop` run that stops with `env` exits 1, so launchd shows `last exit code = 1`. Every other stop still exits 0, and the agent has no `KeepAlive`, so a failed run waits for its next scheduled hour. A failed probe used to leave launchd at 0 and `launchd.log` empty, which hid a two-day outage.

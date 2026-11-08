@@ -9,6 +9,7 @@ import pytest
 from builders import GOOD, add_loop_package, commit, git, init_origin, tag
 
 from kit.errors import KitError
+from kit.kit_command import DEFAULT_COMMAND
 from kit.gitrun import run
 from kit.kitfile import Apply, KitFile, LoopConfig, RequestsConfig, write_kitfile
 from kit.loop.alert import record_probe_failure
@@ -310,8 +311,9 @@ def test_install_refuses_while_another_agent_runs_a_loop_for_the_repo(tmp_path):
 
 def test_install_needs_the_snapshot_of_the_latest_applied_version(tmp_path):
     _, repo = init_origin(tmp_path)
-    with pytest.raises(KitError, match="no snapshot src for v0.2.0"):
+    with pytest.raises(KitError, match="no snapshot src for v0.2.0") as error:
         install(repo, tmp_path / "home", tmp_path / "agents", None, stub_tools(tmp_path).get)
+    assert f"run {DEFAULT_COMMAND} apply {repo} at that version first" in str(error.value)
 
 
 def test_install_needs_a_loop_section(tmp_path):
@@ -447,7 +449,7 @@ def test_version_lines_say_runs_hand_over_when_the_snapshot_exists(tmp_path):
     cli.parent.mkdir(parents=True)
     cli.write_text("")
     assert version_lines(repo, plist, tmp_path / "home", origin_on("v0.4.2")) == [
-        f"plist: starts on v0.2.0, repo is on v0.4.2, runs hand over to v0.4.2; update it with kit loop install {repo}"
+        f"plist: starts on v0.2.0, repo is on v0.4.2, runs hand over to v0.4.2; update it with {DEFAULT_COMMAND} loop install {repo}"
     ]
 
 

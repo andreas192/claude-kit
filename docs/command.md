@@ -32,6 +32,7 @@ scripts/apply-kit.sh <investment|dividend-growth> [vX.Y.Z] [--no-pr]   # version
 
 It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<version>` branch.
 
+- `apply` records `kit_command` (`uv run --project <this checkout> kit`) in the repo's `.claude/kit.json`, because `kit` is not on PATH. It rewrites code spans and code-block lines that start with a bare `kit <subcommand>` in the repo's `CLAUDE.md` and top-level `docs/*.md` to that command (not `docs/superpowers/`), and lists them in the PR. The plugin's `kit-command-guard` hook denies a bare `kit <subcommand>` in a Bash call and names that command (or `uv run --project ~/Projects/Personal/claude-kit kit` when none is recorded).
 - `apply --launch-agents DIR`: where the loop's launchd plist goes when the repo has one (default `~/Library/LaunchAgents`).
 - `roadmap <repo>`: read-only. Exits 1 with each error's line number when `docs/roadmap.md` does not validate. Starts with a `loop probe failing since ...` line while the repo's loop has a failing probe.
 - `loop run`: one loop run in the foreground. `--pick-only` prints the pick and stops. `--weekend-ok` lets it run on Saturday or Sunday.
