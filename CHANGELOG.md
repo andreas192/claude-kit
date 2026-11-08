@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `loop.read_first` entries that point outside the repo (such as `../investment/GOLD_SCHEMA.md`) reach loop sessions as absolute paths. Loop sessions run in `.claude/worktrees/feature-loop`, where `../investment` does not exist, so the spec and plan stages could not read the upstream contract: Read reported a missing file and Bash outside the checkout is denied in don't-ask mode. Entries inside the repo stay relative and are read from the worktree. `kit loop run`, `resume` and `install` stop with a `KitError` naming the entry when a `read_first` path does not exist.
+
 ## v0.5.0 — 2026-11-08
 
 - `kit` is not on PATH, and sessions in kit repos kept running a bare `kit roadmap .` or `kit request`, failing with exit 127 and searching the docs for the real command. `kit apply` now records `kit_command` (`uv run --project <the kit checkout it ran from> kit`) in `.claude/kit.json`. It rewrites every code span and code-block line that starts with `kit <subcommand>` in the repo's `CLAUDE.md` and top-level `docs/*.md` to that command, and lists each rewritten line in the PR under "Bare kit commands rewritten to the full command". Specs and plans under `docs/superpowers/` are left alone.

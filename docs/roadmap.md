@@ -47,3 +47,13 @@ The cause of the 2026-11-03 expiry is unknown, so it may happen again. Scope: wh
 - Blocked by: owner decision on upgrading to Max or reducing how much the loops run
 
 The 2026-11-02 insights report counted 18 runs stopped on usage. On 2026-11-03 runs were stopping at about 80% of the 7-day window. The options are Max, a larger `loop.interval_hours`, or the cheaper stage models the report suggests.
+
+## Loop cost
+
+### Ship the code tasks when only an owner acceptance step is left
+- Status: owner
+- Blocked by: owner decision on whether a PR may ship with its real-data acceptance left to the owner
+
+Loop worktrees have no `data/` and no access to the real upstream API, so a plan task that needs either cannot run. On 2026-10-30 and 2026-11-02 about 10 build sessions across dividend-growth and investment parked with every code task done and `uv run pytest -q` passing, only because the last task was a real-data acceptance run. The 2026-W44 insights report counted 5 of 9 finished items parked in dividend-growth and 6 of 6 in investment (L3), each after spec and plan were paid for.
+
+Scope: `src/kit/loop/prompts/plan.md` puts steps that need real data, the network or the owner's machine under `## Owner acceptance` in the plan, not as tasks; `build.md` replies `LOOP: ok` when only that section is left; `pr.md` copies it into the PR body. Measure with `kit insights`: parked share and $ per shipped item should fall.
