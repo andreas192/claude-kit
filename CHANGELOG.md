@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.1 — 2026-11-08
 
 - `loop.read_first` entries that point outside the repo (such as `../investment/GOLD_SCHEMA.md`) reach loop sessions as absolute paths. Loop sessions run in `.claude/worktrees/feature-loop`, where `../investment` does not exist, so the spec and plan stages could not read the upstream contract: Read reported a missing file and Bash outside the checkout is denied in don't-ask mode. Entries inside the repo stay relative and are read from the worktree. `kit loop run`, `resume` and `install` stop with a `KitError` naming the entry when a `read_first` path does not exist.
 
