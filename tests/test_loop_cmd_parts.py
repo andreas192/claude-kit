@@ -81,6 +81,29 @@ def test_require_loop_returns_the_section():
     assert require_loop(kit, Path("/r")) == LoopConfig("main")
 
 
+def _sibling_layout(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "docs" / "a.md").write_text("a")
+    (tmp_path / "sibling").mkdir()
+    (tmp_path / "sibling" / "SCHEMA.md").write_text("s")
+    return repo
+
+
+def test_require_loop_makes_a_read_first_path_outside_the_repo_absolute(tmp_path):
+    repo = _sibling_layout(tmp_path)
+    kit = KitFile("t", (), LoopConfig("main", read_first=("docs/a.md", "../sibling/SCHEMA.md")))
+    config = require_loop(kit, repo)
+    assert config.read_first == ("docs/a.md", str((tmp_path / "sibling" / "SCHEMA.md").resolve()))
+
+
+def test_require_loop_names_a_missing_read_first_path(tmp_path):
+    repo = _sibling_layout(tmp_path)
+    kit = KitFile("t", (), LoopConfig("main", read_first=("../sibling/GONE.md",)))
+    with pytest.raises(KitError, match=r"read_first entry '../sibling/GONE.md' .* does not exist"):
+        require_loop(kit, repo)
+
+
 @pytest.mark.parametrize("kit", [None, KitFile("t", ())])
 def test_require_loop_without_a_section_is_a_kit_error(kit):
     with pytest.raises(KitError, match=r"/r/.claude/kit.json has no loop section"):

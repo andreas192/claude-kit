@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -61,7 +61,16 @@ def scratch_dir(repo: Path, root: Path | None = None) -> Path:
 def require_loop(kit: KitFile | None, repo: Path) -> LoopConfig:
     if kit is None or kit.loop is None:
         raise KitError(f"{repo / KITFILE} has no loop section")
-    return kit.loop
+    return replace(kit.loop, read_first=tuple(read_first_path(repo, entry) for entry in kit.loop.read_first))
+
+
+def read_first_path(repo: Path, entry: str) -> str:
+    """Loop sessions run in `WORKTREE`, so an entry outside the repo (`../sibling/x.md`) is given as an absolute path."""
+    root = repo.resolve()
+    target = (root / entry).resolve()
+    if not target.exists():
+        raise KitError(f"read_first entry '{entry}' in {repo / KITFILE} does not exist ({target}); fix or remove it")
+    return entry if target.is_relative_to(root) else str(target)
 
 
 def program(repo: Path, which: Which = shutil.which) -> list[str]:
