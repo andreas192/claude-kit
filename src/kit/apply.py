@@ -11,6 +11,7 @@ from kit.bench.run import write_baseline
 from kit.detect import Ask, checked_answers, checked_ask, detect, previous_answers, resolve, test_layers_json
 from kit.errors import KitError
 from kit.gitrun import Runner, require_dir, run_input
+from kit.kit_command import kit_command, rewrite_docs, with_command
 from kit.kitfile import Apply, KitFile, read_kitfile, with_apply, write_kitfile
 from kit.loop.schedule import loop_label, other_loop_agents
 from kit.migrate import (
@@ -65,6 +66,7 @@ def apply(
     detected = detect(repo)
     resolved = resolve(detected, {**previous_answers(repo, detected), **answers}, ask)
     branch = f"chore/claude-kit-{version}"
+    command = kit_command(kit_repo.resolve())
     gitops.create_branch(repo, branch, run)
 
     with gitops.retry_hint_on_failure(branch):
@@ -78,23 +80,24 @@ def apply(
         layers = test_layers_json(resolved)
         (repo / LAYERS_PATH).write_text(json.dumps(layers, indent=2) + "\n")
         apply_migration(repo, migration)
-        added = [str(LAYERS_PATH), *copy_missing(repo, starter.files), *ignore_bench_reports(repo)]
+        added = [str(LAYERS_PATH), *copy_missing(repo, with_command(starter.files, command)), *ignore_bench_reports(repo)]
+        rewritten = tuple(prose_outside(rewrite_docs(repo, command), added))
 
         checks = verify(snap / "plugins" / PLUGIN_NAME, repo, layers, resolved.test_command, kit_home, run_input)
         require_passing(checks, branch)
     commit = gitops.commit_all(repo, f"chore: apply claude-kit {version}", run)
     recorded = Apply(version, commit, gitops.commit_time(repo, commit, run), migration.overrides)
-    write_kitfile(repo, with_apply(KitFile(resolved.test_command, kit.applies, kit.loop, kit.requests), recorded))
+    write_kitfile(repo, with_apply(KitFile(resolved.test_command, kit.applies, kit.loop, kit.requests, command), recorded))
     gitops.commit_all(repo, f"chore: record claude-kit {version}", run)
 
     had_loop = OLD_LOOP_SCRIPT in (*migration.remove, *migration.overrides)
     label = loop_label(repo.name)
     notes = [
-        *loop_notes(had_loop, other_loop_agents(agents_dir, repo, label), kit.loop is not None, repo),
-        *plist_notes(agents_dir / f"{label}.plist", version, repo),
+        *loop_notes(had_loop, other_loop_agents(agents_dir, repo, label), kit.loop is not None, repo, command),
+        *plist_notes(agents_dir / f"{label}.plist", version, repo, command),
     ]
     targets = kit.requests.targets if kit.requests else ()
     prose = [*prose_outside(prose_mentions(repo, run), added), *isolation_notes(repo, targets)]
-    body = gitops.pr_body(version, migration, removed_hooks, added, prose, checks, roadmap_files(repo, run), notes)
+    body = gitops.pr_body(version, migration, removed_hooks, added, prose, checks, roadmap_files(repo, run), notes, rewritten)
     url = gitops.open_pr(repo, branch, f"chore: apply claude-kit {version}", body, run) if open_pr else None
     return ApplyResult(branch, commit, url, checks)

@@ -4,6 +4,10 @@
       {
         "matcher": "Write|Edit",
         "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/test-layer-guard.mjs\"" }]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/kit-command-guard.mjs\"" }]
       }
     ],
     "Stop": [

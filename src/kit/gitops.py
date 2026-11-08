@@ -77,6 +77,7 @@ def pr_body(
     checks: list[Check],
     to_convert: list[str],
     loop_notes: list[str],
+    rewritten: tuple[str, ...] = (),
 ) -> str:
     removed = [*(f"- {name}" for name in m.remove), *(f"- hook entry: {command}" for command in removed_hooks)]
     lines = [
@@ -86,6 +87,7 @@ def pr_body(
         *_section("Removed (known kit content)", removed),
         *_section("Kept as local overrides", [f"- {name}" for name in m.overrides]),
         *_section("Edit by hand on this branch", [f"- {location}" for location in prose]),
+        *_optional_section("Bare kit commands rewritten to the full command", [f"- {location}" for location in rewritten]),
         *_optional_section("Roadmap to convert into docs/roadmap.md", [f"- {name}" for name in to_convert]),
         *_optional_section("Loop", [f"- {note}" for note in loop_notes]),
         *_section("Checks", [f"- {check_line(check)}" for check in checks]),

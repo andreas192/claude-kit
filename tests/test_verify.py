@@ -14,6 +14,7 @@ from kit.verify import (
     check_agents,
     check_context_warn,
     check_guard,
+    check_kit_guard,
     check_line,
     check_settings,
     check_tests,
@@ -142,10 +143,10 @@ def test_tests_run_in_the_repo(tmp_path: Path) -> None:
 
 
 @needs_node
-def test_run_checks_returns_the_five_checks_in_order(tmp_path: Path) -> None:
+def test_run_checks_returns_the_six_checks_in_order(tmp_path: Path) -> None:
     repo = repo_with(tmp_path, LAYERS)
     checks = run_checks(PLUGIN, repo, LAYERS, "true", tmp_path / "state", run_input)
-    assert [c.name for c in checks] == ["settings", "guard", "context-warn", "agents", "tests"]
+    assert [c.name for c in checks] == ["settings", "guard", "context-warn", "kit-command", "agents", "tests"]
     assert all(c.passed for c in checks), [c for c in checks if not c.passed]
 
 
@@ -154,7 +155,7 @@ def test_run_checks_runs_every_check_even_after_a_failure(tmp_path: Path) -> Non
     repo = repo_with(tmp_path, LAYERS)
     (repo / ".claude" / "settings.json").write_text("{nope")
     checks = run_checks(PLUGIN, repo, LAYERS, "false", tmp_path / "state", run_input)
-    assert [c.passed for c in checks] == [False, True, True, True, False]
+    assert [c.passed for c in checks] == [False, True, True, True, True, False]
 
 
 def missing_program(cmd: list[str], cwd: Path, stdin: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -171,6 +172,27 @@ def test_context_warn_fails_naming_a_missing_node(tmp_path: Path) -> None:
     assert not check.passed and "node: not found" in check.detail
 
 
+@needs_node
+def test_kit_guard_passes_and_names_the_recorded_command(tmp_path: Path) -> None:
+    repo = repo_with(tmp_path, LAYERS)
+    (repo / ".claude" / "kit.json").write_text(json.dumps({"test_command": "t", "applies": [], "kit_command": "uv run --project /k kit"}))
+    check = check_kit_guard(PLUGIN, repo, run_input)
+    assert check.passed and "uv run --project /k kit" in check.detail
+
+
+def test_kit_guard_fails_naming_a_missing_node(tmp_path: Path) -> None:
+    check = check_kit_guard(PLUGIN, repo_with(tmp_path, LAYERS), missing_program)
+    assert not check.passed and "node: not found" in check.detail
+
+
+def test_kit_guard_fails_when_a_bare_command_is_allowed(tmp_path: Path) -> None:
+    def silent(cmd: list[str], cwd: Path, stdin: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    check = check_kit_guard(PLUGIN, repo_with(tmp_path, LAYERS), silent)
+    assert not check.passed and "not denied" in check.detail
+
+
 def test_tests_fail_naming_a_missing_shell(tmp_path: Path) -> None:
     check = check_tests(tmp_path, "true", missing_program)
     assert not check.passed and "sh: not found" in check.detail and "may predate the kit" in check.detail
@@ -179,7 +201,7 @@ def test_tests_fail_naming_a_missing_shell(tmp_path: Path) -> None:
 def test_run_checks_reports_every_check_when_programs_are_missing(tmp_path: Path) -> None:
     repo = repo_with(tmp_path, LAYERS)
     checks = run_checks(PLUGIN, repo, LAYERS, "true", tmp_path / "state", missing_program)
-    assert [c.passed for c in checks] == [True, False, False, True, False]
+    assert [c.passed for c in checks] == [True, False, False, False, True, False]
 
 
 @needs_node

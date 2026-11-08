@@ -149,6 +149,13 @@ def test_pr_body_says_none_for_an_empty_section() -> None:
     assert "Roadmap to convert" not in body and "### Loop" not in body
 
 
+def test_pr_body_lists_the_rewritten_kit_commands_after_the_hand_edits() -> None:
+    body = pr_body("v0.4.4", Migration((), ()), [], [], [], [], [], [], ["docs/roadmap.md:3"])
+    sections = {s.splitlines()[0]: s.splitlines()[1:] for s in body.split("### ")[1:]}
+    assert sections["Bare kit commands rewritten to the full command"] == ["- docs/roadmap.md:3", ""]
+    assert list(sections).index("Bare kit commands rewritten to the full command") == list(sections).index("Edit by hand on this branch") + 1
+
+
 def test_pr_body_prints_the_roadmap_and_loop_sections_when_given() -> None:
     body = pr_body(
         "v0.2.0", Migration((), ()), [], [], [], [], ["docs/next-steps.md"], ["after merging, run kit loop install <repo>"]

@@ -161,35 +161,37 @@ def test_roadmap_files_is_empty_without_any(git_repo):
 
 def test_loop_notes_come_in_the_stated_order():
     agents = [Path("/a/com.old.one.plist"), Path("/a/com.old.two.plist")]
-    assert loop_notes(True, agents, False, Path("/r/app")) == [
+    assert loop_notes(True, agents, False, Path("/r/app"), "uv run --project /k kit") == [
         "before merging, run scripts/feature_loop.sh uninstall in the repo (loaded: com.old.one.plist)",
         "before merging, run scripts/feature_loop.sh uninstall in the repo (loaded: com.old.two.plist)",
-        "after merging, run kit loop install /r/app",
+        "after merging, run uv run --project /k kit loop install /r/app",
         "add a loop section to .claude/kit.json (see the spec)",
     ]
 
 
 def test_loop_notes_are_empty_for_a_repo_without_a_loop():
-    assert loop_notes(False, [], False, Path("/r/app")) == []
+    assert loop_notes(False, [], False, Path("/r/app"), "uv run --project /k kit") == []
 
 
 def test_loop_notes_skip_the_section_hint_when_the_section_exists():
-    assert loop_notes(True, [], True, Path("/r/app")) == ["after merging, run kit loop install /r/app"]
+    assert loop_notes(True, [], True, Path("/r/app"), "uv run --project /k kit") == [
+        "after merging, run uv run --project /k kit loop install /r/app"
+    ]
 
 
 def test_plist_notes_ask_for_a_reinstall_when_the_plist_pins_another_version(tmp_path):
     plist = tmp_path / "a.plist"
     plist.write_text("<string>/k/v0.2.0/src</string>")
-    assert plist_notes(plist, "v0.4.2", Path("/r/app")) == [
-        "after merging, run kit loop install /r/app: its plist still starts runs on v0.2.0"
+    assert plist_notes(plist, "v0.4.2", Path("/r/app"), "uv run --project /k kit") == [
+        "after merging, run uv run --project /k kit loop install /r/app: its plist still starts runs on v0.2.0"
     ]
 
 
 def test_plist_notes_are_empty_on_the_same_version_or_without_a_plist(tmp_path):
     plist = tmp_path / "a.plist"
-    assert plist_notes(plist, "v0.4.2", Path("/r/app")) == []
+    assert plist_notes(plist, "v0.4.2", Path("/r/app"), "uv run --project /k kit") == []
     plist.write_text("<string>/k/v0.4.2/src</string>")
-    assert plist_notes(plist, "v0.4.2", Path("/r/app")) == []
+    assert plist_notes(plist, "v0.4.2", Path("/r/app"), "uv run --project /k kit") == []
 
 
 def test_isolation_notes_flag_an_unqualified_never_write_line(tmp_path):

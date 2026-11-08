@@ -9,6 +9,7 @@ from builders import commit, git, tag
 
 from kit.errors import KitError
 from kit.gitrun import run
+from kit.kit_command import rewrite_text
 from kit.starter import copy_missing, ignore_bench_reports, read_starter
 
 
@@ -94,5 +95,10 @@ def test_the_shipped_starter_claude_md_points_at_the_roadmap() -> None:
 
 def test_the_shipped_starter_claude_md_tells_how_to_ask_another_repo() -> None:
     text = (STARTER_SOURCE / "CLAUDE.md").read_text()
-    assert "run `kit request`" in text
+    assert "run `uv run --project ~/Projects/Personal/claude-kit kit request <this repo> <target repo> <request file>`" in text
     assert "never edit another repo's files" in text
+
+
+@pytest.mark.parametrize("path", sorted(p for p in (Path(__file__).parents[1] / "starter").rglob("*.md")), ids=str)
+def test_starter_docs_name_kit_by_its_full_command(path: Path) -> None:
+    assert rewrite_text(path.read_text(), "X")[1] == []

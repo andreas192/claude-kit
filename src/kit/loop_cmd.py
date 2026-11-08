@@ -16,6 +16,7 @@ from pathlib import Path
 
 from kit import __version__
 from kit.errors import KitError
+from kit.kit_command import command_for
 from kit.gitrun import Runner, run
 from kit.kitfile import KITFILE, KitFile, LoopConfig, RequestsConfig, read_kitfile
 from kit.loop import driver
@@ -309,7 +310,7 @@ def snapshot_for_install(repo: Path, config: LoopConfig, kit_home: Path) -> Path
     latest = origin_latest(repo, config.base_branch, run)
     src = snapshot_src(kit_home, latest)
     if not (src / "kit" / "cli.py").is_file():
-        raise KitError(f"no snapshot src for {latest} in {kit_home}; run kit apply {repo} at that version first")
+        raise KitError(f"no snapshot src for {latest} in {kit_home}; run {command_for(repo)} apply {repo} at that version first")
     return src
 
 
@@ -374,7 +375,7 @@ def status_lines(repo: Path, runtime: Path, launchctl: Runner | None) -> list[st
 def drift_line(pinned: str, latest: str, kit_home: Path, repo: Path) -> str:
     target = handover_target(latest, pinned, kit_home)
     effect = f"runs hand over to {latest}" if target else f"runs stay on {pinned}"
-    return f"plist: starts on {pinned}, repo is on {latest}, {effect}; update it with kit loop install {repo}"
+    return f"plist: starts on {pinned}, repo is on {latest}, {effect}; update it with {command_for(repo)} loop install {repo}"
 
 
 def version_lines(repo: Path, plist: Path, kit_home: Path, runner: Runner) -> list[str]:

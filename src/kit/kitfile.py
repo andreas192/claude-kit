@@ -43,6 +43,7 @@ class KitFile:
     applies: tuple[Apply, ...]
     loop: LoopConfig | None = None
     requests: RequestsConfig | None = None
+    kit_command: str = ""
 
 
 def parse_kitfile(text: str) -> KitFile:
@@ -50,7 +51,15 @@ def parse_kitfile(text: str) -> KitFile:
     applies = tuple(
         Apply(a["version"], a["commit"], a["applied_at"], tuple(a.get("overrides", ()))) for a in data["applies"]
     )
-    return KitFile(data["test_command"], applies, optional_loop(data), optional_requests(data))
+    return KitFile(data["test_command"], applies, optional_loop(data), optional_requests(data), optional_command(data))
+
+
+def optional_command(data: dict[str, Any]) -> str:
+    """How agents run kit in this repo (`uv run --project <kit checkout> kit`), recorded by `kit apply`."""
+    value = data.get("kit_command", "")
+    if not isinstance(value, str):
+        raise KitError("kit_command must be a string")
+    return value
 
 
 def optional_loop(data: dict[str, Any]) -> LoopConfig | None:
@@ -124,7 +133,7 @@ def require_requests(kit: KitFile | None, repo: Path) -> RequestsConfig:
 def with_apply(kit: KitFile, apply: Apply) -> KitFile:
     if kit.applies and kit.applies[-1].version == apply.version:
         raise KitError(f"already on {apply.version}")
-    return KitFile(kit.test_command, (*kit.applies, apply), kit.loop, kit.requests)
+    return KitFile(kit.test_command, (*kit.applies, apply), kit.loop, kit.requests, kit.kit_command)
 
 
 def loop_json(loop: LoopConfig) -> dict[str, Any]:
@@ -143,4 +152,6 @@ def write_kitfile(repo: Path, kit: KitFile) -> None:
         data["loop"] = loop_json(kit.loop)
     if kit.requests is not None:
         data["requests"] = {"targets": list(kit.requests.targets)}
+    if kit.kit_command:
+        data["kit_command"] = kit.kit_command
     path.write_text(json.dumps(data, indent=2) + "\n")

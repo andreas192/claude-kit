@@ -1,6 +1,6 @@
 # Roadmap
 
-What this repo will build next, in priority order. `kit roadmap <repo>` validates this file and shows what the loop would pick next.
+What this repo will build next, in priority order. `uv run --project ~/Projects/Personal/claude-kit kit roadmap <repo>` validates this file and shows what the loop would pick next.
 
 ## How to add an item
 
@@ -15,7 +15,7 @@ Status is required and means:
 - `done`: landed.
 - `dropped`: will not be built.
 
-Other fields: `Depends on` (comma-separated titles from this file), and `Spec`, `Plan`, `PR` (a path or URL), and `Requested by` (the sibling repo directory that asked for this item through `kit request`; set by the kit). The PR that lands an item sets its Status to `done` and fills in Spec, Plan and PR. When unsure whether an item is `open`, mark it `owner`.
+Other fields: `Depends on` (comma-separated titles from this file), and `Spec`, `Plan`, `PR` (a path or URL), and `Requested by` (the sibling repo directory that asked for this item through `uv run --project ~/Projects/Personal/claude-kit kit request`; set by the kit). The PR that lands an item sets its Status to `done` and fills in Spec, Plan and PR. When unsure whether an item is `open`, mark it `owner`.
 
 ## Reliability
 
