@@ -32,6 +32,20 @@ def _pinned(rule: str, repo: Path) -> str:
     return f"{match.group(1)}(/{(repo / match.group(2)).resolve()})"
 
 
+def test_runner(test_command: str) -> str:
+    """The test command without its trailing flags: `uv run pytest -q` gives `uv run pytest`."""
+    words = test_command.split()
+    while len(words) > 1 and words[-1].startswith("-"):
+        words.pop()
+    return " ".join(words)
+
+
+def _test_rules(test_command: str) -> list[str]:
+    """Agents run the test command on single test files (`uv run pytest tests/x.py`), so allow the runner with any arguments."""
+    runner = test_runner(test_command)
+    return [f"Bash({test_command}*)", f"Bash({runner} *)", f"Bash({runner})"]
+
+
 def _forbidden_rules(repo: Path, forbidden: tuple[str, ...]) -> list[str]:
     rules: list[str] = []
     for path in forbidden:
@@ -53,7 +67,7 @@ def loop_settings(
     allow = [
         *base_perms["allow"],
         *(_pinned(rule, repo) for rule in extra_perms.get("allow", [])),
-        f"Bash({test_command}*)",
+        *_test_rules(test_command),
         # Write outside the checkout is granted only by Edit rules; Write rules there match nothing.
         _absolute_rule("Edit", scratch),
     ]
