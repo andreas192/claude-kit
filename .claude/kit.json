@@ -1,0 +1,29 @@
+{
+  "test_command": "uv run pytest -q",
+  "applies": [
+    {
+      "version": "v0.5.1",
+      "commit": "616f2462481d139c2a96e4e0506cd29f126804af",
+      "applied_at": "2026-11-18T21:07:43Z",
+      "overrides": [
+        "tests/test_context_warn_hook.py"
+      ]
+    }
+  ],
+  "kit_command": "uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit",
+  "loop": {
+    "base_branch": "main",
+    "forbidden_paths": [
+      "../investment",
+      "../dividend-growth",
+      "../capital-trading"
+    ],
+    "read_first": [
+      "docs/code-conventions.md"
+    ],
+    "pr_checklist": [
+      "Add a bullet under `## Unreleased` in CHANGELOG.md for every user-visible change, and update docs/command.md when a command, flag or output line changes. Do not bump versions or tag: releases are cut by the owner with the releasing-claude-kit skill."
+    ],
+    "interval_hours": 5
+  }
+}

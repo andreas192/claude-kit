@@ -27,6 +27,29 @@ A failed probe stopped both loops for two days while launchd reported exit code 
 
 Scope: `src/kit/loop/driver.py` (`guarded`) and `src/kit/loop_cmd.py`. Exit non-zero when a run stops with `env`, and record the stop so `kit loop status` and `kit roadmap` show it until a later probe succeeds. Check that `osascript` banners are delivered from launchd, and keep the existing `notify` path if they are. A probe failure must still cost nothing and must not retry in a loop.
 
+### Keep a loop stopped on a broken roadmap visible until it runs again
+- Status: open
+
+From 2026-11-08 to 2026-11-18 every investment run (37 on v0.5.1) stopped with `environment failure: roadmap: docs/roadmap.md:71: Blocked by is only for owner or blocked`: one `done` item kept a `Blocked by: nothing` line. Each run sent one `osascript` banner and nothing else, so nobody noticed for ten days. A failing probe already leaves a lasting line; this stop did not.
+
+Scope: `src/kit/loop/alert.py`, `src/kit/loop/driver.py` (`guarded`), `src/kit/loop_cmd.py` (`status_lines`) and `src/kit/roadmap_report.py`. When a run stops with `env` for a reason other than the probe, keep the first time and the latest reason in one file in the runtime dir (`env-failure.txt`, same shape as `probe-failure.txt`), and clear it on the next run that gets past the environment checks. `kit loop status` and `kit roadmap` start with `loop stopped since <time>: <reason>` while it lasts. The reason is the `KitError` text only, never message text. UNIT tests in `tests/test_loop_alert.py` and the driver tests; no change to how often the loop runs.
+
+### Name the stop reasons in the L4 finding
+- Status: open
+
+The 2026-W46 insights report said only "0 stage errors, 25 failed runs" for investment and pointed at permission denials. The advisor then guessed a missing `Bash(uv run pytest*)` allow rule, but the real cause was a roadmap validation error. `stages.jsonl` already records each stop's `reason`.
+
+Scope: `src/kit/insights/loopstats.py`, `src/kit/insights/findings.py` and their tests. Count failed runs per stop reason (`env`, `crash`) and put the counts in the L4 evidence (for example `25 failed runs: env 25`). Change the L4 suggestion to "read the last lines of `kit loop status <repo>`; `env` means the probe, the roadmap or a `read_first` path failed before any stage". Counts only, no log text, so the advisor still sees only the report.
+
+## Insights accuracy
+
+### Stop one long-lived session from setting the session duration median
+- Status: open
+
+S1 (session duration, median) was 11,623 minutes in dividend-growth and 11,658 in investment for 2026-W46, each from a single session that ran about eight days from its first to its last message, most likely one that was resumed. One such session makes a whole week's S1 meaningless.
+
+Scope: `src/kit/bench/measures.py` (`m_duration`) and whatever computes `minutes(s)`, with UNIT tests. Count active time: sum the gaps between consecutive messages, leaving out any gap over a named constant (`IDLE_GAP_MINUTES = 30`). Note the changed meaning of S1 in `CHANGELOG.md`, because bench and insights tables for older weeks change when re-run.
+
 ### Keep loop agents on the applied kit version
 - Status: done
 - PR: https://github.com/andreas192/claude-kit/pull/16
