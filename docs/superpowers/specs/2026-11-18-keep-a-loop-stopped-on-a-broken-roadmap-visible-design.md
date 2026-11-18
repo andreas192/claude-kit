@@ -62,7 +62,8 @@ Success: while a loop is stopped on `env` for a reason other than the probe, `ki
 - "Gets past the environment checks" means one of these, and each one calls `_Run.passed()`, which sets `errors = 0` and calls `clear_env_failure`:
   - `_Run.pick` parsed the roadmap and made a pick (the existing `self.errors = 0`), or found nothing left (`nothing_left`).
   - `_Run.pick` returned `done` on an unchanged `none_key`. The snapshot worked and the roadmap is the one that last parsed.
-  - A stage in `_Run.work` ended with any outcome other than `error` (the existing `self.errors = 0`).
+  - A stage in `_Run.work` ended with any outcome other than `error` (the existing `self.errors = 0`). This also covers a branch that `_Run.once` resumes through `unfinished`. That path skips `pick`, so its first stage that ends other than `error` is what clears the record.
+- `_none_key` contains the blob id of `origin/<base>:docs/roadmap.md`, so an unchanged `none_key` means the roadmap is byte-for-byte the one that last parsed. A roadmap that broke since then changes the key and goes through `pick`, where it fails again and keeps the record.
 - Stops before those points do not clear the record: weekend, usage limit, a failed probe, or an `env` stop. A failed probe also does not clear it, because the probe runs before the roadmap is read.
 - `pick_only` neither writes nor clears the file.
 - `guarded` is not changed. The roadmap item lists it, but it never sees the cause and already exits 1 on `env`.
