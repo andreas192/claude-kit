@@ -17,6 +17,7 @@ from kit.gitrun import Runner
 VERSION_PATTERN = re.compile(r"v(\d+)\.(\d+)\.(\d+)")
 PLUGIN_NAME = "kit"
 STAGE_NAME = "snapshot"
+BYTECODE_CACHE = "__pycache__"
 
 
 def parse_version(version: str) -> tuple[int, int, int]:
@@ -40,9 +41,11 @@ def latest_tag(kit_repo: Path, run: Runner) -> str:
 
 
 def tree_digest(path: Path) -> str:
-    """SHA-256 over the sorted relative paths and bytes of every file under path."""
+    """SHA-256 over the sorted relative paths and bytes of every file under path, except the
+    `__pycache__` folders Python writes when a loop runs from the snapshot."""
     digest = hashlib.sha256()
-    for file in sorted(p for p in path.rglob("*") if p.is_file() or p.is_symlink()):
+    files = (p for p in path.rglob("*") if (p.is_file() or p.is_symlink()) and BYTECODE_CACHE not in p.relative_to(path).parts)
+    for file in sorted(files):
         name = file.relative_to(path).as_posix().encode()
         body = os.readlink(file).encode() if file.is_symlink() else file.read_bytes()
         digest.update(len(name).to_bytes(8, "big") + name + len(body).to_bytes(8, "big") + body)
