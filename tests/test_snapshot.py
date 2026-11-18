@@ -168,3 +168,13 @@ def test_tree_digest_is_stable_and_covers_paths_and_bytes(tmp_path):
     assert tree_digest(a) == tree_digest(b)
     assert tree_digest(a) != tree_digest(c)
     assert tree_digest(a) != tree_digest(d)
+
+
+def test_tree_digest_ignores_python_bytecode_caches(tmp_path):
+    clean, ran = tmp_path / "clean", tmp_path / "ran"
+    for root in (clean, ran):
+        (root / "kit").mkdir(parents=True)
+        (root / "kit" / "cli.py").write_text("x")
+    (ran / "kit" / "__pycache__").mkdir()
+    (ran / "kit" / "__pycache__" / "cli.cpython-312.pyc").write_bytes(b"\x00")
+    assert tree_digest(clean) == tree_digest(ran)
