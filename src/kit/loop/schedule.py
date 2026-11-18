@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+INSIGHTS_LABEL = "com.kit.insights"
+
 PINNED_SNAPSHOT = re.compile(r"/(v\d+\.\d+\.\d+)/src</string>")
 WEEKDAYS = range(1, 6)  # launchd Weekday: 1 = Monday ... 5 = Friday
 PLIST_HEADER = (
@@ -92,9 +94,10 @@ def pinned_other_version(plist: Path, version: str) -> str | None:
 
 
 def other_loop_agents(agents_dir: Path, repo: Path, own_label: str) -> list[Path]:
-    own_name = f"{own_label}.plist"
+    """Agents other than this repo's loop that name the repo; the kit's insights agent names the kit checkout but runs no loop."""
+    skipped = {f"{own_label}.plist", f"{INSIGHTS_LABEL}.plist"}
     return sorted(
         path
         for path in agents_dir.glob("*.plist")
-        if path.name != own_name and str(repo) in path.read_text()
+        if path.name not in skipped and str(repo) in path.read_text()
     )
