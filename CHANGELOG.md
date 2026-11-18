@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `kit apply` no longer refuses a version whose snapshot a loop has run from. Python writes `__pycache__/` folders into `~/.claude/kit/<version>/src` when the loop runs with that `PYTHONPATH`, and the snapshot check counted them, so re-applying the same version (or applying it to another repo) failed with "snapshot ... differs from tag". The check now skips `__pycache__/`; every other file must still match the tag byte for byte.
+- Loop sessions may run the test runner with any arguments (`uv run pytest tests/test_x.py`), not only commands that start with the full `test_command` (`uv run pytest -q`). The implementer and reviewer agents are told to run the tests on single files, so don't-ask mode denied them and the build stage parked with "no task can be verified".
 
 ## v0.5.1 — 2026-11-08
 

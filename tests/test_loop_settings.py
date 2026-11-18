@@ -53,3 +53,15 @@ def test_the_scratch_dir_is_allowed_by_an_edit_rule_because_write_rules_grant_no
     allow = loop_settings(base_settings(), {}, tmp_path, (), "uv run pytest -q", tmp_path / "scratch")["permissions"]["allow"]
     assert f"Edit(/{tmp_path / 'scratch'}/**)" in allow
     assert f"Write(/{tmp_path / 'scratch'}/**)" not in allow
+
+
+def test_the_test_runner_is_allowed_with_any_arguments_because_agents_run_it_on_single_files(tmp_path):
+    allow = loop_settings(base_settings(), {}, tmp_path, (), "uv run pytest -q", tmp_path / "rt")["permissions"]["allow"]
+    assert "Bash(uv run pytest -q*)" in allow
+    assert "Bash(uv run pytest *)" in allow
+    assert "Bash(uv run pytest)" in allow
+
+
+def test_a_test_command_without_flags_adds_no_duplicate_runner_rule(tmp_path):
+    allow = loop_settings(base_settings(), {}, tmp_path, (), "make test", tmp_path / "rt")["permissions"]["allow"]
+    assert [rule for rule in allow if rule.startswith("Bash(make test")] == ["Bash(make test*)", "Bash(make test *)", "Bash(make test)"]
