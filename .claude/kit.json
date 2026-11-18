@@ -10,5 +10,20 @@
       ]
     }
   ],
-  "kit_command": "uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit"
+  "kit_command": "uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit",
+  "loop": {
+    "base_branch": "main",
+    "forbidden_paths": [
+      "../investment",
+      "../dividend-growth",
+      "../capital-trading"
+    ],
+    "read_first": [
+      "docs/code-conventions.md"
+    ],
+    "pr_checklist": [
+      "Add a bullet under `## Unreleased` in CHANGELOG.md for every user-visible change, and update docs/command.md when a command, flag or output line changes. Do not bump versions or tag: releases are cut by the owner with the releasing-claude-kit skill."
+    ],
+    "interval_hours": 5
+  }
 }

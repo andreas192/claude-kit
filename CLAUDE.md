@@ -2,7 +2,7 @@
 
 ## Why
 
-The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) grew inside `dividend-growth` and was copied by hand into `investment`. The copies drifted, and there was no way to tell whether a change to the setup made sessions cheaper or smoother. claude-kit is one repo that holds the shared setup and a local pipeline that applies a pinned kit version to a repo (`uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit apply`) and benchmarks each repo's past sessions per applied kit version against a control repo (`uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit bench`), using only transcripts already on disk.
+The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) grew inside `dividend-growth` and was copied by hand into `investment`. The copies drifted, and there was no way to tell whether a change to the setup made sessions cheaper or smoother. claude-kit is one repo that holds the shared setup and a local pipeline that applies a pinned kit version to a repo (`kit apply`) and benchmarks each repo's past sessions per applied kit version against a control repo (`kit bench`), using only transcripts already on disk.
 
 ## Specs and plans
 
@@ -23,7 +23,7 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
 - Follow `docs/code-conventions.md` (copied from dividend-growth in task 1): minimal functions, typed named results, typed errors (`KitError`), UNIT tests beside each module, PIPELINE tests only in `tests/test_cli_pipeline.py`. `cli.py`, `apply.py` and `bench/run.py` are wiring.
 - Plugin name `kit`; marketplace name `kit-v<major>-<minor>-<patch>`; agents `kit:implementer-haiku`, `kit:implementer-sonnet`, `kit:reviewer-sonnet`.
 - Named constants: `MIN_SESSIONS = 5`, `FIX_WINDOW_DAYS = 7`, `DEFAULT_STEP = 60_000` (context-warn), `KIT_HOME = ~/.claude/kit`.
-- Never write to `../investment` or `../capital-trading` from a dividend-growth session, except a roadmap request to investment through `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit request`. Investment is changed only by `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit apply` run by the owner or from a session inside investment.
+- Never write to `../investment` or `../capital-trading` from a dividend-growth session, except a roadmap request to investment through `kit request`. Investment is changed only by `kit apply` run by the owner or from a session inside investment.
 - `request` writes nothing in the requester; in the target it only creates a temporary worktree under `~/.claude/kit/requests/`, pushes one `request/<key>` branch and opens one PR adding one item to `docs/roadmap.md`.
 
 ## Working conventions
@@ -34,7 +34,7 @@ The owner's Claude Code setup (agents, hooks, token rules, token benchmarks) gre
   - When it fails, does it fail early with a typed `KitError` that names the cause and the next step, and leave no half-applied state behind?
   - Does it stay inside its write boundaries (see Global Constraints), and could a user predict every file it touches?
   - Is the change backwards compatible with repos already on an older kit version, or is the break versioned, written in `CHANGELOG.md` and given a migration path?
-  - Can its effect be measured (`uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit bench`, `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit insights`) instead of assumed?
+  - Can its effect be measured (`kit bench`, `kit insights`) instead of assumed?
   - Prefer boring, explicit, observable behaviour over clever behaviour. Prefer one obvious way to do a thing over flags. Reject features that add magic, hidden state or network calls the user did not ask for.
 
 ## Testing

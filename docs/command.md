@@ -36,7 +36,7 @@ It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<versio
 - `apply --launch-agents DIR`: where the loop's launchd plist goes when the repo has one (default `~/Library/LaunchAgents`).
 - `roadmap <repo>`: read-only. Exits 1 with each error's line number when `docs/roadmap.md` does not validate. Starts with a `loop probe failing since ...` line while the repo's loop has a failing probe.
 - `loop run`: one loop run in the foreground. `--pick-only` prints the pick and stops. `--weekend-ok` lets it run on Saturday or Sunday.
-- `loop install|uninstall`: write or remove `com.kit.loop.<repo-name>.plist` and load or unload it with `launchctl`. `--no-launchctl` only writes the file. Run `loop install` again after an apply PR merges to move the plist to that version; `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit apply` cannot do it (it writes only the repo and `~/.claude/kit/`, before the merge) and leaves a reminder in the PR. Until then a run starts on the plist's version and hands over to the applied one, or stays on the plist's version if the handover check fails. Install reloads the agent, which stops a run in progress, so check that none is active first.
+- `loop install|uninstall`: write or remove `com.kit.loop.<repo-name>.plist` and load or unload it with `launchctl`. `--no-launchctl` only writes the file. Run `loop install` again after an apply PR merges to move the plist to that version; `kit apply` cannot do it (it writes only the repo and `~/.claude/kit/`, before the merge) and leaves a reminder in the PR. Until then a run starts on the plist's version and hands over to the applied one, or stays on the plist's version if the handover check fails. Install reloads the agent, which stops a run in progress, so check that none is active first.
 - `loop status`: launchd state and the last 20 lines of `loop.log`, after a `loop probe failing since ...` line while the probe is failing and a `plist:` line when the plist pins a different version from `.claude/kit.json` on `origin/<base_branch>`.
 - `request <requester-repo> <target-repo> <request-file>`: files a roadmap request on another repo as a PR and prints its URL. The request file holds an optional `Target: <repo>` line, a `### <title>` heading, optional `- Field: value` lines and a body. The item lands as `Status: owner` in `## Requests` of the target's `docs/roadmap.md` (`Status`, `Blocked by`, `Requested by` and `Depends on` from the file are replaced or dropped). Only targets listed in the requester's `requests.targets` that run kit v0.4.0 or later are accepted. It writes nothing in the requester; in the target it uses a temporary worktree under `<kit-home>/requests/` and never touches the target's checkout.
 - `loop.read_first` in `.claude/kit.json`: paths relative to the repo root. An entry outside the repo (`../sibling/x.md`) is passed to loop sessions as an absolute path, because they run in `.claude/worktrees/feature-loop`. A missing entry stops `loop run`, `resume` and `install` with an error naming it.
@@ -45,7 +45,7 @@ It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<versio
 
 ## Loop
 
-`uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit loop` runs the feature loop for a repo that has a `loop` section in `.claude/kit.json` and a `docs/roadmap.md`. Each run takes the first `open` roadmap item, works it on the `loop/<key>` branch in a worktree (spec, plan, build, PR), and opens a PR (a draft only when the item is parked).
+`kit loop` runs the feature loop for a repo that has a `loop` section in `.claude/kit.json` and a `docs/roadmap.md`. Each run takes the first `open` roadmap item, works it on the `loop/<key>` branch in a worktree (spec, plan, build, PR), and opens a PR (a draft only when the item is parked).
 
 Runtime files live in `~/.claude/kit/loop/<repo-name>/`, never in the repo:
 
@@ -60,7 +60,7 @@ Runtime files live in `~/.claude/kit/loop/<repo-name>/`, never in the repo:
 
 The PR stage session writes its PR body to `pr-body.md` in `<temp dir>/kit-loop/<repo-name>/`, not in the runtime dir: `~/.claude/` is protected in don't-ask mode, and a file outside the checkout is writable only through an `Edit(//<abs path>/**)` rule (a `Write(...)` rule there grants nothing).
 
-Each `claude -p` session loads the kit plugin with `--plugin-dir ~/.claude/kit/<running version>/plugins/kit`. `-p` never registers the marketplace that `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit apply` declares in `.claude/settings.json`, so without the flag the `kit:*` agents are missing. The probe session stops the run (`probe: agents not loaded: ...`) when its `init` event lacks any `kit:*` agent, before any spec or plan stage.
+Each `claude -p` session loads the kit plugin with `--plugin-dir ~/.claude/kit/<running version>/plugins/kit`. `-p` never registers the marketplace that `kit apply` declares in `.claude/settings.json`, so without the flag the `kit:*` agents are missing. The probe session stops the run (`probe: agents not loaded: ...`) when its `init` event lacks any `kit:*` agent, before any spec or plan stage.
 
 A run that stops with `env` exits 1, so launchd shows `last exit code = 1`; any other stop exits 0. The agent has no `KeepAlive`, so it waits for the next scheduled hour.
 
@@ -70,21 +70,21 @@ The scheduled agent runs on weekdays only, from the applied version's snapshot (
 
 A spec question the loop cannot answer parks the item as a draft PR; `resume` leads to a PR that `gh pr ready` moves out of draft. The PR body and the spec on the loop branch list the questions under `## Questions for the owner`.
 
-1. Answer each question in the spec on `loop/<key>`, so that `## Questions for the owner` is empty. Do it in a separate worktree (`git worktree add ../<key> loop/<key>`), commit and push, then remove it (`git worktree remove ../<key>`). If you used your main checkout, switch it off `loop/<key>` first: `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit loop resume` refuses while any other worktree has the branch checked out.
+1. Answer each question in the spec on `loop/<key>`, so that `## Questions for the owner` is empty. Do it in a separate worktree (`git worktree add ../<key> loop/<key>`), commit and push, then remove it (`git worktree remove ../<key>`). If you used your main checkout, switch it off `loop/<key>` first: `kit loop resume` refuses while any other worktree has the branch checked out.
 2. Run `uv run --project ~/Projects/Personal/claude-kit kit loop resume <repo> <key>`. It sets the branch's status back to stage `spec`, commits and pushes. The next weekday run finishes the spec and carries on.
 
-`uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit loop resume` refuses while a run holds the lock.
+`kit loop resume` refuses while a run holds the lock.
 
 ## Insights
 
-`uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit insights run` writes `~/.claude/kit/insights/<YYYY>-W<ww>.md` (named for the last complete ISO week) and prints it. For each kit repo under `--base` it shows:
+`kit insights run` writes `~/.claude/kit/insights/<YYYY>-W<ww>.md` (named for the last complete ISO week) and prints it. For each kit repo under `--base` it shows:
 
 - **Loop by week / by kit version**: runs, stage sessions, shipped, parked, build sessions per shipped item, errors, stops on usage, $ per stage, $ per shipped item, the spec + plan share of $, and median stage peak context. All of it comes from `stages.jsonl`, so loop numbers start with the first run on a version that writes it.
 - **Sessions by week / by kit version**: bench's B/F/S/Q4 rows over interactive sessions, with the loop's own sessions left out.
 - **Findings**: L1-L7 (loop) and S1-S6 (sessions) rules on the latest week, each with its numbers and one suggested change. Thresholds are in `src/kit/insights/findings.py`.
 - **Suggested changes**: a read-only Sonnet session (Read/Grep/Glob, cwd the kit repo) reads the report and the kit's prompts, agents, hooks and token rules, and proposes up to 8 changes. Each cites a number. It costs about $0.20; `--no-advise` skips it.
 
-`uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit insights install` writes `~/Library/LaunchAgents/com.kit.insights.plist`. It runs the kit checkout (not a snapshot) on Mondays at 09:00 with `--notify`, and logs to `~/.claude/kit/insights/launchd.log`.
+`kit insights install` writes `~/Library/LaunchAgents/com.kit.insights.plist`. It runs the kit checkout (not a snapshot) on Mondays at 09:00 with `--notify`, and logs to `~/.claude/kit/insights/launchd.log`.
 
 ## Release
 
