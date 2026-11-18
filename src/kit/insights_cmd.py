@@ -12,10 +12,10 @@ from kit.errors import KitError
 from kit.gitrun import Runner, run
 from kit.insights.advise import advisor_command, write_settings
 from kit.insights.run import INSIGHTS_DIR, Advisor, run_insights
-from kit.loop.schedule import plist_xml
+from kit.loop.schedule import INSIGHTS_LABEL, plist_xml
 from kit.loop_cmd import Which, _bootout, _load, loop_path
 
-LABEL = "com.kit.insights"
+LABEL = INSIGHTS_LABEL
 MONDAY = 1
 HOUR = 9
 TOOLS = ("claude", "uv", "git")

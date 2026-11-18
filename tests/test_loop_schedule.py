@@ -46,6 +46,11 @@ def test_other_loop_agents_finds_the_old_dgi_agent(tmp_path):
     ) == [tmp_path / "com.dgi.feature-loop.plist"]
 
 
+
+def test_other_loop_agents_skips_the_kit_insights_agent(tmp_path):
+    (tmp_path / "com.kit.insights.plist").write_text("<string>/p/claude-kit</string>")
+    assert other_loop_agents(tmp_path, Path("/p/claude-kit"), "com.kit.loop.claude-kit") == []
+
 def pinning(version: str) -> str:
     env = {"PATH": "/usr/bin", "PYTHONPATH": f"/home/.claude/kit/{version}/src"}
     return plist_xml("com.kit.loop.demo", ["uv"], env, Path("/r"), Path("/l"), [0])
