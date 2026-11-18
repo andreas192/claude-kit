@@ -1,0 +1,14 @@
+{
+  "test_command": "uv run pytest -q",
+  "applies": [
+    {
+      "version": "v0.5.1",
+      "commit": "616f2462481d139c2a96e4e0506cd29f126804af",
+      "applied_at": "2026-11-18T21:07:43Z",
+      "overrides": [
+        "tests/test_context_warn_hook.py"
+      ]
+    }
+  ],
+  "kit_command": "uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit"
+}
