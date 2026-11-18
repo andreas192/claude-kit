@@ -3,8 +3,8 @@
 ## Unreleased
 
 - `kit apply` no longer refuses a version whose snapshot a loop has run from. Python writes `__pycache__/` folders into `~/.claude/kit/<version>/src` when the loop runs with that `PYTHONPATH`, and the snapshot check counted them, so re-applying the same version (or applying it to another repo) failed with "snapshot ... differs from tag". The check now skips `__pycache__/`; every other file must still match the tag byte for byte.
-
 - `kit loop install` and `kit apply` no longer take the kit's own insights agent (`com.kit.insights`) for a second loop on the claude-kit repo. That agent names the kit checkout as its project and working directory, so `kit loop install` on claude-kit stopped with "already runs a loop for this repo".
+
 ## v0.5.1 — 2026-11-08
 
 - `loop.read_first` entries that point outside the repo (such as `../investment/GOLD_SCHEMA.md`) reach loop sessions as absolute paths. Loop sessions run in `.claude/worktrees/feature-loop`, where `../investment` does not exist, so the spec and plan stages could not read the upstream contract: Read reported a missing file and Bash outside the checkout is denied in don't-ask mode. Entries inside the repo stay relative and are read from the worktree. `kit loop run`, `resume` and `install` stop with a `KitError` naming the entry when a `read_first` path does not exist.
