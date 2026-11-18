@@ -1,0 +1,20 @@
+{
+  "extraKnownMarketplaces": {
+    "kit-v0-5-1": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/rickymicky/.claude/kit/v0.5.1"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "kit@kit-v0-5-1": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(git show *)",
+      "Bash(grep *)"
+    ]
+  }
+}

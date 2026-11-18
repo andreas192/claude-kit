@@ -25,7 +25,7 @@ Other fields: `Depends on` (comma-separated titles from this file), and `Spec`, 
 
 A failed probe stopped both loops for two days while launchd reported exit code 0 and `launchd.log` stayed empty. See `docs/reports/2026-11-05-loop-auth-outage.md`.
 
-Scope: `src/kit/loop/driver.py` (`guarded`) and `src/kit/loop_cmd.py`. Exit non-zero when a run stops with `env`, and record the stop so `kit loop status` and `kit roadmap` show it until a later probe succeeds. Check that `osascript` banners are delivered from launchd, and keep the existing `notify` path if they are. A probe failure must still cost nothing and must not retry in a loop.
+Scope: `src/kit/loop/driver.py` (`guarded`) and `src/kit/loop_cmd.py`. Exit non-zero when a run stops with `env`, and record the stop so `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit loop status` and `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit roadmap` show it until a later probe succeeds. Check that `osascript` banners are delivered from launchd, and keep the existing `notify` path if they are. A probe failure must still cost nothing and must not retry in a loop.
 
 ### Keep loop agents on the applied kit version
 - Status: done
@@ -33,7 +33,7 @@ Scope: `src/kit/loop/driver.py` (`guarded`) and `src/kit/loop_cmd.py`. Exit non-
 
 Both plists still pinned `PYTHONPATH` to `~/.claude/kit/v0.2.0/src`, though both repos recorded v0.4.2. Scheduled runs did reach v0.4.2 through the handover; only a failed handover check left them on the pin. See `docs/reports/2026-11-05-loop-auth-outage.md`.
 
-Nothing re-ran `kit loop install` after 2026-10-26, and `kit apply` asked for it only when migrating off the old loop script. `apply` may not write the plist, so its PR now carries a reminder, and `kit loop status` reports a plist on a different version from the repo.
+Nothing re-ran `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit loop install` after 2026-10-26, and `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit apply` asked for it only when migrating off the old loop script. `apply` may not write the plist, so its PR now carries a reminder, and `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit loop status` reports a plist on a different version from the repo.
 
 ### Find why scheduled runs lost the Claude login
 - Status: blocked
@@ -56,4 +56,4 @@ The 2026-11-02 insights report counted 18 runs stopped on usage. On 2026-11-03 r
 
 Loop worktrees have no `data/` and no access to the real upstream API, so a plan task that needs either cannot run. On 2026-10-30 and 2026-11-02 about 10 build sessions across dividend-growth and investment parked with every code task done and `uv run pytest -q` passing, only because the last task was a real-data acceptance run. The 2026-W44 insights report counted 5 of 9 finished items parked in dividend-growth and 6 of 6 in investment (L3), each after spec and plan were paid for.
 
-Scope: `src/kit/loop/prompts/plan.md` puts steps that need real data, the network or the owner's machine under `## Owner acceptance` in the plan, not as tasks; `build.md` replies `LOOP: ok` when only that section is left; `pr.md` copies it into the PR body. Measure with `kit insights`: parked share and $ per shipped item should fall.
+Scope: `src/kit/loop/prompts/plan.md` puts steps that need real data, the network or the owner's machine under `## Owner acceptance` in the plan, not as tasks; `build.md` replies `LOOP: ok` when only that section is left; `pr.md` copies it into the PR body. Measure with `uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit insights`: parked share and $ per shipped item should fall.
