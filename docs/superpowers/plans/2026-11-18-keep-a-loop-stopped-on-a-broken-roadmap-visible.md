@@ -30,7 +30,7 @@
 
 ---
 
-### Task 1: Env-failure record in `alert.py`
+### Task 1: Env-failure record in `alert.py` ✅ done (b867f8d)
 
 **Model:** haiku
 
