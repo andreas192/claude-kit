@@ -169,6 +169,18 @@ def test_a_run_on_an_unchanged_none_key_clears_the_record(tmp_path):
     assert run(again.env()) == "done" and not any(c[:2] == ["git", "show"] for c in again.cmds)
     assert env_line(tmp_path) == ""
 
+def test_a_resumed_branch_whose_first_stage_ends_ok_clears_the_record(tmp_path):
+    keep = lambda f: record_env_failure(tmp_path / "runtime", FRIDAY, "git fetch origin failed (exit 1)")
+    reason, f = run_fake(tmp_path, resume_branch="loop/a", setup=keep, build=[step()])
+    assert reason == "done" and f.stages[:2] == ["probe", "build"]
+    assert env_line(tmp_path) == ""
+
+def test_a_resumed_branch_whose_stage_errors_twice_keeps_the_first_time(tmp_path):
+    keep = lambda f: record_env_failure(tmp_path / "runtime", FRIDAY, "git fetch origin failed (exit 1)")
+    reason, _ = run_fake(tmp_path, resume_branch="loop/a", setup=keep, build=[fail_step(), fail_step()])
+    assert reason == "env"
+    assert env_line(tmp_path) == "loop stopped since 2026-10-23T10:00:00: build stage: session failed"
+
 def test_weekend_usage_limit_and_failed_probe_runs_keep_the_record(tmp_path):
     run(FakeEnv(tmp_path, scripts(), roadmap=BROKEN).env())
     assert run(FakeEnv(tmp_path, {}, now=lambda: SUNDAY).env()) == "weekend"
@@ -241,6 +253,8 @@ Expected: FAIL with ImportError on `kit_detail`.
   - `pick`, replace `self.errors = 0` with `self.passed()`.
   - `work`: `self.failed(f"{stage} stage: {r.detail}", f"{stage} stage: {kit_detail(r.detail)}")`; replace `self.errors = 0` with `self.passed()`.
   - `_run_until_stop`: `loop.failed(<the existing why expression>, command_reason(e))`.
+  - `once`, `unfinished` path: no new call. It skips `pick`, so the `passed()` in `work` after its first stage that ends other than `error` is what clears the record (spec: resumed branch).
+- `_none_key` already holds the roadmap blob id, so clearing on an unchanged key is safe; do not change `_none_key`.
 - `pick_only`, `guarded` and `_probe` are not touched.
 
 - [ ] **Step 4: Run to verify they pass**
