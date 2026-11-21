@@ -1,14 +1,14 @@
 {
   "extraKnownMarketplaces": {
-    "kit-v0-5-1": {
+    "kit-v0-5-2": {
       "source": {
         "source": "directory",
-        "path": "/Users/rickymicky/.claude/kit/v0.5.1"
+        "path": "/Users/rickymicky/.claude/kit/v0.5.2"
       }
     }
   },
   "enabledPlugins": {
-    "kit@kit-v0-5-1": true
+    "kit@kit-v0-5-2": true
   },
   "permissions": {
     "allow": [
