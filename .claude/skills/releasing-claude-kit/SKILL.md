@@ -33,12 +33,19 @@ A release is one commit `chore: release vX.Y.Z` on a `release/vX.Y.Z` branch, me
 5. **Verify.** Run `uv run pytest -q`; it must pass. Run `grep -rnE '\bv?0\.[0-9]+\.[0-9]+' src plugin scripts docs/command.md tests/test_cli.py`. Every hit must be the new version.
 6. **Commit and open the release PR.** `git commit -m "chore: release vX.Y.Z"`, `git push -u origin release/vX.Y.Z`, then `gh pr create --base main --title "chore: release vX.Y.Z"`. The body says what ships, lists the bumped files, and has an "After merge" section with the tag step and the apply commands. Don't tag yet, and never push to `main` directly.
 7. **Tag after the owner merges.** The owner merges the PR with a merge commit (not squash or rebase, which would rewrite the release commit). Then `git switch main && git pull --ff-only origin main` and check that `git log -1 --format=%s` is `Merge pull request #N from <owner>/release/vX.Y.Z` and that `plugin/.claude-plugin/plugin.json` says `"version": "X.Y.Z"`. Then `git tag vX.Y.Z` (it tags `main`'s HEAD, the merge commit) and `git push origin vX.Y.Z`. Pushing a tag can't be taken back, so ask the owner before pushing unless they already said to publish or push.
-8. **Hand over** the apply command: `scripts/apply-kit.sh <investment|dividend-growth> vX.Y.Z`. Don't run it. It is the owner's step, and it never runs from a dividend-growth session against investment.
+8. **Roll out to every kit repo, only through `scripts/apply-kit.sh`.** The repos are the ones under `~/Projects/Personal` with a `.claude/kit.json`: today claude-kit, investment and dividend-growth. Ask the owner before running it unless they already asked for the rollout. It is never run from a dividend-growth session against investment.
+   1. Before anything, check that no loop is running: `launchctl print gui/$(id -u)/com.kit.loop.<repo>` shows `state = not running` for each repo.
+   2. Run `scripts/apply-kit.sh <repo> vX.Y.Z` once per repo. The script applies from a temporary worktree of `origin/<default branch>` and opens one `chore/claude-kit-vX.Y.Z` PR per repo, so the owner's checkouts keep their branches and uncommitted work. Never apply by hand with `kit apply <checkout>`, `git checkout develop` or a stash in the owner's checkout.
+   3. For claude-kit, revert apply's bare-command rewrites in `CLAUDE.md`, `docs/command.md` and `docs/roadmap.md` on its apply branch, and push. The apply PR should then change only `.claude/kit.json` and `.claude/settings.json`; check every repo's PR diff for that.
+   4. Once the owner says so, merge each apply PR with a merge commit. Then run `uv run kit loop install ../<repo>` for each repo with a loop, and check `uv run kit loop status ../<repo>`: no `plist:` drift line, and the plist's `PYTHONPATH` ends in `vX.Y.Z/src`.
+   5. Report each repo's PR URL and status line.
 
 ## Common mistakes
 
 - Editing `uv.lock` by hand, or forgetting it. `uv lock` rewrites it.
 - Leaving the default in `apply-kit.sh` at an old version.
+- Applying in the owner's checkout (switching it to `develop`, stashing, or `kit apply` on its path) instead of through `apply-kit.sh`'s worktree.
+- Merging an apply PR and skipping `kit loop install`: the loop keeps starting on the old snapshot.
 - Re-tagging after a fix. Release X.Y.(Z+1) instead.
 - Tagging before the release PR is merged, or after someone else's commit landed on `main`: HEAD is then not the release merge. Check the HEAD subject before `git tag`.
 - Releasing an `Unreleased` section that doesn't match `git log`, in either direction.

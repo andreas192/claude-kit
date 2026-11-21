@@ -24,13 +24,15 @@ uv run --project ~/Projects/Personal/claude-kit kit insights run [--base DIR] [-
 uv run --project ~/Projects/Personal/claude-kit kit insights install|uninstall [--base DIR] [--launch-agents DIR] [--no-launchctl] [--kit-home DIR]
 ```
 
-To apply a pinned version to `investment` or `dividend-growth` from an up-to-date `develop`, then bench it against the other repo:
+To apply a pinned version to a kit repo, then bench it against a control repo:
 
 ```sh
-scripts/apply-kit.sh <investment|dividend-growth> [vX.Y.Z] [--no-pr]   # version defaults to v0.5.2
+scripts/apply-kit.sh <investment|dividend-growth|claude-kit> [vX.Y.Z] [--no-pr]   # version defaults to v0.5.2
 ```
 
-It stops on a missing tag, a dirty tree or an existing `chore/claude-kit-<version>` branch.
+It applies from a temporary detached worktree of `origin/<default branch>` (from `origin/HEAD`: `develop` for investment and dividend-growth, `main` for claude-kit) at `~/.claude/kit/apply/<repo>`, and removes it on exit, pass or fail. The repo's checkout keeps its branch and uncommitted work; only `kit bench` writes its gitignored `.claude/kit-bench/` there. It stops before creating the worktree on a missing tag, a `chore/claude-kit-<version>` branch that already exists locally or on origin, or a worktree left from an earlier run. After a failed apply it prints the `git branch -D` to run before retrying. The control is dividend-growth for investment, investment for dividend-growth and claude-kit.
+
+For claude-kit itself, apply rewrites the bare `kit` command names in the prose of `CLAUDE.md`, `docs/command.md` and `docs/roadmap.md`. Revert those three files on the apply PR branch.
 
 - `apply` records `kit_command` (`uv run --project <this checkout> kit`) in the repo's `.claude/kit.json`, because `kit` is not on PATH. It rewrites code spans and code-block lines that start with a bare `kit <subcommand>` in the repo's `CLAUDE.md` and top-level `docs/*.md` to that command (not `docs/superpowers/`), and lists them in the PR. The plugin's `kit-command-guard` hook denies a bare `kit <subcommand>` in a Bash call and names that command (or `uv run --project ~/Projects/Personal/claude-kit kit` when none is recorded).
 - `apply --launch-agents DIR`: where the loop's launchd plist goes when the repo has one (default `~/Library/LaunchAgents`).
