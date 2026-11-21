@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `scripts/apply-kit.sh` applies from a temporary worktree of `origin/<default branch>` at `~/.claude/kit/apply/<repo>`, so it no longer switches the repo's checkout to `develop` or refuses a checkout with uncommitted work. It also takes `claude-kit`, and stops early when the apply branch exists on origin or a worktree is left from an earlier run.
+
 ## v0.5.2 — 2026-11-21
 
 - `kit apply` no longer refuses a version whose snapshot a loop has run from. Python writes `__pycache__/` folders into `~/.claude/kit/<version>/src` when the loop runs with that `PYTHONPATH`, and the snapshot check counted them, so re-applying the same version (or applying it to another repo) failed with "snapshot ... differs from tag". The check now skips `__pycache__/`; every other file must still match the tag byte for byte.
