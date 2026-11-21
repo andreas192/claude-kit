@@ -172,10 +172,15 @@ def _git_in(worktree: Path) -> Callable[[list[str]], str]:
     return sh
 
 
+def stage_env(environ: dict[str, str]) -> dict[str, str]:
+    """The driver's environment without PYTHONPATH: it points at a kit snapshot, and a stage's tests must import the worktree."""
+    return {name: value for name, value in environ.items() if name != "PYTHONPATH"}
+
+
 def _claude_in(worktree: Path, settings: Path, plugin_dir: Path | None) -> Callable[[str, str], list[str]]:
     def claude(stage: str, text: str) -> list[str]:
         try:
-            done = subprocess.run(claude_command(stage, text, settings, plugin_dir), cwd=worktree, capture_output=True, text=True, timeout=STAGE_TIMEOUT)
+            done = subprocess.run(claude_command(stage, text, settings, plugin_dir), cwd=worktree, env=stage_env(dict(os.environ)), capture_output=True, text=True, timeout=STAGE_TIMEOUT)
         except subprocess.TimeoutExpired:
             return [failure_line(f"claude timed out after {STAGE_TIMEOUT // 3600} hours")]
         return stream_lines(done.stdout, done.returncode, done.stderr)

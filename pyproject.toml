@@ -24,3 +24,5 @@ python-preference = "only-managed"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# The loop driver runs with PYTHONPATH on a kit snapshot; tests must import this checkout's src first.
+pythonpath = ["src"]

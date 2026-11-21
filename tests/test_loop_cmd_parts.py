@@ -31,6 +31,7 @@ from kit.loop_cmd import (
     resume,
     runtime_dir,
     scratch_dir,
+    stage_env,
     status_lines,
     uninstall,
     version_lines,
@@ -521,3 +522,8 @@ def test_request_hooks_name_the_targets_and_file_through_file_request_file(tmp_p
     record = hooks.file_request(request, "loop/row-a")
     assert (record.target, record.title, record.url) == ("elsewhere", "Fix", "")
     assert "'elsewhere' is not in requests.targets" in record.error
+
+
+def test_stage_env_drops_the_drivers_pythonpath_so_tests_import_the_worktree():
+    env = stage_env({"PATH": "/usr/bin", "PYTHONPATH": "/home/.claude/kit/v0.5.1/src", "HOME": "/home"})
+    assert env == {"PATH": "/usr/bin", "HOME": "/home"}
