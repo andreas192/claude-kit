@@ -80,3 +80,16 @@ The 2026-11-02 insights report counted 18 runs stopped on usage. On 2026-11-03 r
 Loop worktrees have no `data/` and no access to the real upstream API, so a plan task that needs either cannot run. On 2026-10-30 and 2026-11-02 about 10 build sessions across dividend-growth and investment parked with every code task done and `uv run pytest -q` passing, only because the last task was a real-data acceptance run. The 2026-W44 insights report counted 5 of 9 finished items parked in dividend-growth and 6 of 6 in investment (L3), each after spec and plan were paid for.
 
 Scope: `src/kit/loop/prompts/plan.md` puts steps that need real data, the network or the owner's machine under `## Owner acceptance` in the plan, not as tasks; `build.md` replies `LOOP: ok` when only that section is left; `pr.md` copies it into the PR body. Measure with `kit insights`: parked share and $ per shipped item should fall.
+
+## Requests
+
+### Start the loop at build when a roadmap item already has its spec and plan
+- Status: owner
+- Blocked by: the owner's review of a request from industry-peers
+- Requested by: industry-peers
+
+The loop always starts a picked item at the `spec` stage (`new_status` in `src/kit/loop/state.py`), with spec and plan paths built from the run date and the title key. It ignores the item's `Spec:` and `Plan:` fields. An item whose spec and plan were written and approved in a session therefore gets both stages run again: the spec stage reads the existing file as owner answers (only if the paths match, which needs the same date and title), and the plan stage runs `writing-plans` again and can rewrite the approved plan. If the run date differs, a second spec and plan get written next to the approved ones.
+
+Wanted: when a picked item has `Spec:` (and optionally `Plan:`) set to files that exist on the base branch, the loop uses those paths in the status file and starts at `plan` (spec only) or `build` (both). Owner questions in the given spec still park, as today. `kit roadmap` could report a `Spec:`/`Plan:` path that doesn't exist.
+
+Case: dividend-growth item "Industry peer comparison" (spec `docs/superpowers/specs/2026-11-18-industry-peer-comparison-design.md`, plan `docs/superpowers/plans/2026-11-18-industry-peer-comparison.md`, 7 tasks with model tags), left `blocked` on this request.
