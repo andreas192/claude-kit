@@ -8,9 +8,16 @@
       "overrides": [
         "tests/test_context_warn_hook.py"
       ]
+    },
+    {
+      "version": "v0.5.2",
+      "commit": "c24f2700c47bcabedaf73eaff5da800ee4233e74",
+      "applied_at": "2026-11-21T09:59:37Z",
+      "overrides": [
+        "tests/test_context_warn_hook.py"
+      ]
     }
   ],
-  "kit_command": "uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit",
   "loop": {
     "base_branch": "main",
     "forbidden_paths": [
@@ -25,5 +32,6 @@
       "Add a bullet under `## Unreleased` in CHANGELOG.md for every user-visible change, and update docs/command.md when a command, flag or output line changes. Do not bump versions or tag: releases are cut by the owner with the releasing-claude-kit skill."
     ],
     "interval_hours": 5
-  }
+  },
+  "kit_command": "uv run --project /Users/rickymicky/Projects/Personal/claude-kit kit"
 }
